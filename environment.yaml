@@ -1,0 +1,9 @@
+name: cf2zarr
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - xarray
+  - netCDF4
+  - dask
+  - zarr
