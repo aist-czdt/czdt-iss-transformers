@@ -53,4 +53,4 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    main(**vars(args))
+    main(args.sort_dim, args.pattern, args.output, args.variables)
