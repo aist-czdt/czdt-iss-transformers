@@ -36,7 +36,7 @@ def main(dim, pattern, output, variables=None):
 
     ds.to_zarr(
         os.path.join('output', output),
-        'w-',
+        mode='w-',
         encoding=encoding,
         consolidated=True,
         write_empty_chunks=False
