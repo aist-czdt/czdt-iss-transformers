@@ -6,4 +6,4 @@ dependencies:
   - xarray
   - netCDF4
   - dask
-  - zarr
+  - zarr==2.15.0
