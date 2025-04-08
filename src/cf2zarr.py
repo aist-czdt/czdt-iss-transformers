@@ -7,7 +7,7 @@ import zarr
 
 
 def main(dim, pattern, output, variables=None):
-    ds = xr.open_mfdataset(os.path.join('input', pattern), concat_dim=dim).sortby(dim)
+    ds = xr.open_mfdataset(os.path.join('input', pattern)).sortby(dim)
 
     print(ds)
 
@@ -46,7 +46,7 @@ def main(dim, pattern, output, variables=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-s', '--sort-dim', default='time', help='Dimension to concatenate and sort along')
+    parser.add_argument('-s', '--sort-dim', default='time', help='Dimension to sort along')
     parser.add_argument('-p', '--pattern', default='*.nc', help='Glob pattern to match')
     parser.add_argument('-o', '--output', required=True, help='Output zarr filename')
     parser.add_argument('--variables', required=False, nargs='*', help='Variables to convert')
