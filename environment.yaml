@@ -7,3 +7,9 @@ dependencies:
   - netCDF4
   - dask
   - zarr==2.15.0
+  - pandas
+  - boto3
+  - s3fs==2022.5.0
+  - fsspec==2022.5.0
+  - aiobotocore>=2.3.0,<2.4
+
