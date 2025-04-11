@@ -1,17 +1,17 @@
 
 import argparse
 import os
+import shutil
+import tempfile
 from urllib.parse import urlparse
 
 import boto3
+import numpy as np
 import pandas as pd
-
 import xarray as xr
 import zarr
-import tempfile
-import shutil
-import numpy as np
-
+from botocore.credentials import Credentials
+from s3fs import S3FileSystem, S3Map
 
 staging_dirs = []
 
@@ -50,13 +50,22 @@ def _stage_s3(prefix_url: str, client) -> str:
     return staging_dir
 
 
-def _open_zarr(zarr_url: str, method: str, client) -> xr.Dataset:
+def _open_zarr(zarr_url: str, method: str, client, credentials: Credentials, session) -> xr.Dataset:
     if method == 'stage':
         print('Staging zarr data to local')
         local_dir = _stage_s3(zarr_url, client)
         return xr.open_zarr(os.path.join(local_dir, os.path.basename(zarr_url.rstrip('/'))), consolidated=True)
     elif method == 'mount':
-        raise NotImplementedError()
+        s3 = S3FileSystem(
+            False,
+            key=credentials.access_key,
+            secret=credentials.secret_key,
+            token=credentials.token,
+            client_kwargs=dict(region_name='us-west-2')
+        )
+
+        store = S3Map(root=zarr_url, s3=s3, check=False)
+        return xr.open_zarr(store, consolidated=True)
     else:
         raise ValueError(f'Unsupported zarr open method: {method}')
 
@@ -67,10 +76,12 @@ def main(args):
     variables = args.variables
     output = args.output
 
-    client = boto3.client('s3')
+    session = boto3.Session(profile_name=os.environ['AWS_PROFILE'])
+    client = session.client('s3')
 
     if args.zarr not in {'', 'none'}:
-        ds = _open_zarr(args.zarr, args.zarr_access, client)
+        credentials = session.get_credentials().get_frozen_credentials()
+        ds = _open_zarr(args.zarr, args.zarr_access, client, credentials, session)
         print('Opened existing zarr dataset')
         print(ds)
     else:

@@ -9,7 +9,7 @@ dependencies:
   - zarr==2.15.0
   - pandas
   - boto3
-  - s3fs==2022.5.0
-  - fsspec==2022.5.0
-  - aiobotocore>=2.3.0,<2.4
+  - s3fs==2025.3.2
+  - fsspec==2025.3.2
+  - aiobotocore==2.21.1
 
