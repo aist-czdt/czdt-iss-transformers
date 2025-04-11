@@ -6,4 +6,12 @@ root_dir=$(dirname "${basedir}")
 
 mkdir -p output
 source activate cf2zarr
-python "${root_dir}"/src/cf2zarr.py --input-s3 $1 --zarr $2 --zarr-access $3 --sort-dim $4 --pattern "$5" --output $6 --variables ${@:7}
+python src/cf2zarr.py \
+  --input-s3 $1 \
+  --zarr $2 \
+  --zarr-access $3 \
+  --time-dim $4 \
+  --pattern "$5" \
+  $([[ $6 != "none" ]] && echo --duration $6)\
+  --output $7 \
+  --variables ${@:8}

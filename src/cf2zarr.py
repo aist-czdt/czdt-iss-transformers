@@ -4,11 +4,13 @@ import os
 from urllib.parse import urlparse
 
 import boto3
+import pandas as pd
 
 import xarray as xr
 import zarr
 import tempfile
 import shutil
+import numpy as np
 
 
 staging_dirs = []
@@ -61,7 +63,7 @@ def _open_zarr(zarr_url: str, method: str, client) -> xr.Dataset:
 
 def main(args):
     pattern = args.pattern
-    dim = args.sort_dim
+    dim = args.time_dim
     variables = args.variables
     output = args.output
 
@@ -102,7 +104,58 @@ def main(args):
     else:
         ds = new_ds
 
+    time_coord = None
+
+    for coord in ds.coords:
+        coord = ds.coords[coord]
+        if coord.dims == (dim,):
+            time_coord = coord.name
+            break
+
+    if time_coord is None:
+        raise ValueError('Cannot determine time coordinate')
+
+    # Dedup time steps
+
+    times = ds[time_coord].to_numpy()
+
+    if any(np.diff(times).astype(int) == 0):
+        print(f'Warning: duplicate time steps detected')
+
+        prev = None
+        drop = []
+
+        for i, v in enumerate(times.astype(int)):
+            if v == prev:
+                drop.append(i - 1)
+
+            prev = v
+
+        print(f'Dropping {len(drop):,} time steps at indices: {drop}')
+
+        ds = ds.drop_duplicates(dim=dim, keep='first')
+
+    if args.duration is not None:
+        ds_duration = pd.Timedelta((ds[time_coord][-1] - ds[time_coord][0]).data.item())
+
+        print(f'new dataset duration: {ds_duration}')
+
+        if ds_duration > args.duration:
+            print('Dataset duration exceeds max duration provided')
+
+            idx = 0
+
+            while pd.Timedelta((ds[time_coord][-1] - ds[time_coord][idx]).data.item()) > args.duration:
+                idx += 1
+
+            ds = ds.isel(time=slice(idx, None))
+
+            print(f'Dropped {idx:,} time steps. New dataset duration: '
+                  f'{pd.Timedelta((ds[time_coord][-1] - ds[time_coord][0]).data.item())}')
+
     chunk_config = (5, 50, 50)
+
+    # exit()
 
     print(f'Setting chunk config: {chunk_config}')
 
@@ -148,15 +201,23 @@ if __name__ == '__main__':
     )
 
     parser.add_argument(
-        '-s', '--sort-dim',
+        '-t', '--time-dim',
         default='time',
-        help='Dimension to sort along'
+        help='Name of the time dimension'
     )
 
     parser.add_argument(
         '-p', '--pattern',
         default='*.nc',
         help='Glob pattern to match'
+    )
+
+    parser.add_argument(
+        '-d', '--duration',
+        type=pd.Timedelta,
+        default=None,
+        help='If set, this is the maximum difference in max-min time of the output dataset. Defined as an ISO 8601 '
+             'Duration (or anything else parseable by pandas.Timedelta)'
     )
 
     parser.add_argument(
