@@ -42,6 +42,13 @@ def _stage_s3(prefix_url: str, client) -> str:
 
     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
         for obj in [o['Key'] for o in page.get('Contents', [])]:
+            if obj.endswith('/'):
+                head = client.head_object(Bucket=bucket, Key=obj)
+
+                if head['ContentLength'] == 0:
+                    print(f'Skipping directory object {obj}')
+                    continue
+
             dst = os.path.join(staging_dir, obj.removeprefix(strip_prefix))
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             print(f'Downloading s3://{bucket}/{obj} to {dst}')
