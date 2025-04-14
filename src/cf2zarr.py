@@ -50,7 +50,7 @@ def _stage_s3(prefix_url: str, client) -> str:
     return staging_dir
 
 
-def _open_zarr(zarr_url: str, method: str, client, credentials: Credentials, session) -> xr.Dataset:
+def _open_zarr(zarr_url: str, method: str, client, credentials: Credentials) -> xr.Dataset:
     if method == 'stage':
         print('Staging zarr data to local')
         local_dir = _stage_s3(zarr_url, client)
@@ -76,12 +76,12 @@ def main(args):
     variables = args.variables
     output = args.output
 
-    session = boto3.Session(profile_name=os.environ['AWS_PROFILE'])
+    session = boto3.Session(profile_name=os.getenv('AWS_PROFILE', None))
     client = session.client('s3')
 
     if args.zarr not in {'', 'none'}:
         credentials = session.get_credentials().get_frozen_credentials()
-        ds = _open_zarr(args.zarr, args.zarr_access, client, credentials, session)
+        ds = _open_zarr(args.zarr, args.zarr_access, client, credentials)
         print('Opened existing zarr dataset')
         print(ds)
     else:
