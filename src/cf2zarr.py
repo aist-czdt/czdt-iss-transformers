@@ -174,7 +174,7 @@ def main(args):
             print(f'Dropped {idx:,} time steps. New dataset duration: '
                   f'{pd.Timedelta((ds[time_coord][-1] - ds[time_coord][0]).data.item())}')
 
-    chunk_config = (5, 50, 50)
+    chunk_config = (24, 90, 90)
 
     # exit()
 
