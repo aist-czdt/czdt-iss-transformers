@@ -60,7 +60,7 @@ def _stage_s3(prefix_url: str, client) -> str:
 def _open_zarr(zarr_url: str, method: str, client, credentials: Credentials) -> xr.Dataset:
     if method == 'stage':
         print('Staging zarr data to local')
-        local_dir = _stage_s3(zarr_url, client)
+        local_dir = _stage_s3(zarr_url.rstrip('/'), client)
         zarr_dir = os.path.join(local_dir, os.path.basename(zarr_url.rstrip('/')))
 
         print(f'Opening staged zarr data at {zarr_dir}')
