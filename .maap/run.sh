@@ -6,7 +6,7 @@ root_dir=$(dirname "${basedir}")
 
 mkdir -p output
 source activate cf2zarr
-python src/cf2zarr.py \
+python "${root_dir}"/src/cf2zarr.py \
   --input-s3 $1 \
   --zarr $2 \
   --zarr-access $3 \

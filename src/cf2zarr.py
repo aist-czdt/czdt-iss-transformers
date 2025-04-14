@@ -251,9 +251,9 @@ if __name__ == '__main__':
     try:
         main(args)
     finally:
-        for staging_dir in staging_dirs:
+        for sd in staging_dirs:
             try:
-                print(f'Cleaning up staging dir: {staging_dir}')
-                shutil.rmtree(staging_dir)
+                print(f'Cleaning up staging dir: {sd}')
+                shutil.rmtree(sd)
             except:
-                print(f'Failed to remove staging dir: {staging_dir}')
+                print(f'Failed to remove staging dir: {sd}')
