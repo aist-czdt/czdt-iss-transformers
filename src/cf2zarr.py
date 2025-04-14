@@ -61,7 +61,10 @@ def _open_zarr(zarr_url: str, method: str, client, credentials: Credentials) -> 
     if method == 'stage':
         print('Staging zarr data to local')
         local_dir = _stage_s3(zarr_url, client)
-        return xr.open_zarr(os.path.join(local_dir, os.path.basename(zarr_url.rstrip('/'))), consolidated=True)
+        zarr_dir = os.path.join(local_dir, os.path.basename(zarr_url.rstrip('/')))
+
+        print(f'Opening staged zarr data at {zarr_dir}')
+        return xr.open_zarr(zarr_dir, consolidated=True)
     elif method == 'mount':
         s3 = S3FileSystem(
             False,
