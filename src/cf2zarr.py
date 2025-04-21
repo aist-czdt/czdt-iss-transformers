@@ -13,7 +13,7 @@ import zarr
 from botocore.credentials import Credentials
 from s3fs import S3FileSystem, S3Map
 
-from .util import stage_s3, open_zarr
+from src.util import stage_s3, open_zarr
 
 staging_dirs = []
 
