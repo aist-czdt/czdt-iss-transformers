@@ -1,10 +1,11 @@
 
 import argparse
+import json
 import os
 import shutil
 import sys
-# import tempfile
-# from urllib.parse import urlparse
+import tempfile
+from urllib.parse import urlparse
 
 import boto3
 import numpy as np
@@ -22,6 +23,19 @@ from src.util import open_zarr
 staging_dirs = []
 
 
+def __get_zarr_urls(args, client):
+    if args.zarr is not None:
+        return list(args.zarr)
+    else:
+        parsed_url = urlparse(args.zarr_manifest)
+
+        with tempfile.NamedTemporaryFile(suffix='.json', mode='w') as temp:
+            client.download_fileobj(parsed_url.netloc, parsed_url.path.lstrip('/'), temp)
+            temp.seek(0)
+            return json.load(temp)
+
+
+
 def main(args):
     dim = args.time_dim
     output = args.output
@@ -31,7 +45,7 @@ def main(args):
 
     datasets = []
 
-    for z_url in args.zarr:
+    for z_url in __get_zarr_urls(args, client):
         credentials = session.get_credentials().get_frozen_credentials()
         ds, stage_dir = open_zarr(args.zarr, args.zarr_access, client, credentials)
 
@@ -134,7 +148,7 @@ if __name__ == '__main__':
 
     input_group.add_argument(
         '-m', '--zarr-manifest',
-        help='Path or S3 URL to file containing a simple JSON list of zarr input URLs'
+        help='S3 URL to file containing a simple JSON list of zarr input URLs'
     )
 
     parser.add_argument(
