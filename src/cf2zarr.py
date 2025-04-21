@@ -2,6 +2,7 @@
 import argparse
 import os
 import shutil
+import sys
 import tempfile
 from urllib.parse import urlparse
 
@@ -12,6 +13,9 @@ import xarray as xr
 import zarr
 from botocore.credentials import Credentials
 from s3fs import S3FileSystem, S3Map
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 from src.util import stage_s3, open_zarr
 
