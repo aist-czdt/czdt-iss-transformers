@@ -13,71 +13,73 @@ import zarr
 from botocore.credentials import Credentials
 from s3fs import S3FileSystem, S3Map
 
+from .util import stage_s3, open_zarr
+
 staging_dirs = []
 
 
-def _stage_s3(prefix_url: str, client) -> str:
-    staging_dir = tempfile.mkdtemp()
-
-    global staging_dirs
-    staging_dirs.append(staging_dir)
-
-    print(f'Created data staging directory: {staging_dir}')
-
-    parsed_url = urlparse(prefix_url)
-
-    if parsed_url.scheme != 's3':
-        raise ValueError(f'Expected s3 URL, got {parsed_url.scheme}')
-
-    bucket = parsed_url.netloc
-    prefix = parsed_url.path.lstrip('/')
-
-    strip_index = prefix.rfind('/')
-    if strip_index != -1:
-        strip_prefix = prefix[:strip_index+1]
-    else:
-        strip_prefix = prefix
-
-    paginator = client.get_paginator('list_objects_v2')
-
-    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-        for obj in [o['Key'] for o in page.get('Contents', [])]:
-            if obj.endswith('/'):
-                head = client.head_object(Bucket=bucket, Key=obj)
-
-                if head['ContentLength'] == 0:
-                    print(f'Skipping directory object {obj}')
-                    continue
-
-            dst = os.path.join(staging_dir, obj.removeprefix(strip_prefix))
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
-            print(f'Downloading s3://{bucket}/{obj} to {dst}')
-            client.download_file(bucket, obj, dst)
-
-    return staging_dir
-
-
-def _open_zarr(zarr_url: str, method: str, client, credentials: Credentials) -> xr.Dataset:
-    if method == 'stage':
-        print('Staging zarr data to local')
-        local_dir = _stage_s3(zarr_url.rstrip('/'), client)
-        zarr_dir = os.path.join(local_dir, os.path.basename(zarr_url.rstrip('/')))
-
-        print(f'Opening staged zarr data at {zarr_dir}')
-        return xr.open_zarr(zarr_dir, consolidated=True)
-    elif method == 'mount':
-        s3 = S3FileSystem(
-            False,
-            key=credentials.access_key,
-            secret=credentials.secret_key,
-            token=credentials.token,
-            client_kwargs=dict(region_name='us-west-2')
-        )
-
-        store = S3Map(root=zarr_url, s3=s3, check=False)
-        return xr.open_zarr(store, consolidated=True)
-    else:
-        raise ValueError(f'Unsupported zarr open method: {method}')
+# def _stage_s3(prefix_url: str, client) -> str:
+#     staging_dir = tempfile.mkdtemp()
+#
+#     global staging_dirs
+#     staging_dirs.append(staging_dir)
+#
+#     print(f'Created data staging directory: {staging_dir}')
+#
+#     parsed_url = urlparse(prefix_url)
+#
+#     if parsed_url.scheme != 's3':
+#         raise ValueError(f'Expected s3 URL, got {parsed_url.scheme}')
+#
+#     bucket = parsed_url.netloc
+#     prefix = parsed_url.path.lstrip('/')
+#
+#     strip_index = prefix.rfind('/')
+#     if strip_index != -1:
+#         strip_prefix = prefix[:strip_index+1]
+#     else:
+#         strip_prefix = prefix
+#
+#     paginator = client.get_paginator('list_objects_v2')
+#
+#     for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+#         for obj in [o['Key'] for o in page.get('Contents', [])]:
+#             if obj.endswith('/'):
+#                 head = client.head_object(Bucket=bucket, Key=obj)
+#
+#                 if head['ContentLength'] == 0:
+#                     print(f'Skipping directory object {obj}')
+#                     continue
+#
+#             dst = os.path.join(staging_dir, obj.removeprefix(strip_prefix))
+#             os.makedirs(os.path.dirname(dst), exist_ok=True)
+#             print(f'Downloading s3://{bucket}/{obj} to {dst}')
+#             client.download_file(bucket, obj, dst)
+#
+#     return staging_dir
+#
+#
+# def _open_zarr(zarr_url: str, method: str, client, credentials: Credentials) -> xr.Dataset:
+#     if method == 'stage':
+#         print('Staging zarr data to local')
+#         local_dir = _stage_s3(zarr_url.rstrip('/'), client)
+#         zarr_dir = os.path.join(local_dir, os.path.basename(zarr_url.rstrip('/')))
+#
+#         print(f'Opening staged zarr data at {zarr_dir}')
+#         return xr.open_zarr(zarr_dir, consolidated=True)
+#     elif method == 'mount':
+#         s3 = S3FileSystem(
+#             False,
+#             key=credentials.access_key,
+#             secret=credentials.secret_key,
+#             token=credentials.token,
+#             client_kwargs=dict(region_name='us-west-2')
+#         )
+#
+#         store = S3Map(root=zarr_url, s3=s3, check=False)
+#         return xr.open_zarr(store, consolidated=True)
+#     else:
+#         raise ValueError(f'Unsupported zarr open method: {method}')
 
 
 def main(args):
@@ -91,14 +93,18 @@ def main(args):
 
     if args.zarr not in {'', 'none'}:
         credentials = session.get_credentials().get_frozen_credentials()
-        ds = _open_zarr(args.zarr, args.zarr_access, client, credentials)
+        ds, stage_dir = open_zarr(args.zarr, args.zarr_access, client, credentials)
+
+        if stage_dir is not None:
+            staging_dirs.append(stage_dir)
+
         print('Opened existing zarr dataset')
         print(ds)
     else:
         ds = None
         print('No existing zarr dataset, starting a new one')
 
-    input_stage_dir = _stage_s3(args.input_s3, client)
+    input_stage_dir = stage_s3(args.input_s3, client)
 
     new_ds = xr.open_mfdataset(os.path.join(input_stage_dir, pattern)).sortby(dim)
     print('Opened new dataset from input NetCDF files')
