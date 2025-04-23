@@ -35,7 +35,6 @@ def __get_zarr_urls(args, client):
             return json.load(temp)
 
 
-
 def main(args):
     dim = args.time_dim
     output = args.output
