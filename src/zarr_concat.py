@@ -46,7 +46,7 @@ def main(args):
 
     for z_url in __get_zarr_urls(args, client):
         credentials = session.get_credentials().get_frozen_credentials()
-        ds, stage_dir = open_zarr(args.zarr, args.zarr_access, client, credentials)
+        ds, stage_dir = open_zarr(z_url, args.zarr_access, client, credentials)
 
         if stage_dir is not None:
             staging_dirs.append(stage_dir)
