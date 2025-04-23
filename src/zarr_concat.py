@@ -29,7 +29,7 @@ def __get_zarr_urls(args, client):
     else:
         parsed_url = urlparse(args.zarr_manifest)
 
-        with tempfile.NamedTemporaryFile(suffix='.json', mode='w') as temp:
+        with tempfile.NamedTemporaryFile(suffix='.json', mode='w+b') as temp:
             client.download_fileobj(parsed_url.netloc, parsed_url.path.lstrip('/'), temp)
             temp.seek(0)
             return json.load(temp)
