@@ -36,6 +36,7 @@ def main(args):
     zarr_url = args.zarr
     time_c = args.time
     lat_c = args.latitude
+    lon_c = args.longitude
 
     session = boto3.Session(profile_name=os.getenv('AWS_PROFILE', None))
     client = session.client('s3')
@@ -58,7 +59,8 @@ def main(args):
 
         for time in da[time_c]:
             data = da.sel(time=time)
-            data = data.rio.write_crs("epsg:4326")
+            # TODO: For set_spatial_dims should I determine the dim name instead of using the coord name?
+            data = data.rio.write_crs("epsg:4326").set_spatial_dims(x_dim=lon_c, y_dim=lat_c)
             dt = time.values.astype('datetime64[s]').item()
             data.attrs = {k.upper(): v for k, v in data.attrs.items()}
 
@@ -67,9 +69,9 @@ def main(args):
 
                 if latitude[1] - latitude[0] >= 0:
                     print(f'Flipping latitude for {var_name}')
-                    data = data.isel(latitude=slice(None, None, -1))
+                    data = data.isel({lat_c: slice(None, None, -1)})
             except Exception as e:
-                print(f'Could not check latitude ordering for {var_name}due to {e}')
+                print(f'Could not check latitude ordering for {var_name} due to {e}')
 
             filename = f'{args.output}_{dt.strftime("%Y-%m-%dT%H%M%SZ")}_{var_name}.tif'
 
@@ -106,6 +108,12 @@ if __name__ == '__main__':
         '--latitude',
         default='latitude',
         help='Name of the latitude coordinate'
+    )
+
+    parser.add_argument(
+        '--longitude',
+        default='longitude',
+        help='Name of the longitude coordinate'
     )
 
     parser.add_argument(

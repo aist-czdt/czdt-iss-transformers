@@ -11,4 +11,5 @@ python "${root_dir}"/src/zarr2cog.py \
   --zarr-access $2 \
   --time $3 \
   --latitude $4 \
-  --output $5
+  --latitude $5 \
+  --output $6
