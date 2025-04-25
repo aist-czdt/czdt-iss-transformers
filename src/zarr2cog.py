@@ -61,6 +61,7 @@ def main(args):
             data = da.sel(time=time)
             # TODO: For set_spatial_dims should I determine the dim name instead of using the coord name?
             data = data.rio.write_crs("epsg:4326").set_spatial_dims(x_dim=lon_c, y_dim=lat_c)
+            data = data.rio.set_spatial_dims(x_dim=lon_c, y_dim=lat_c)
             dt = time.values.astype('datetime64[s]').item()
             data.attrs = {k.upper(): v for k, v in data.attrs.items()}
 
