@@ -67,11 +67,11 @@ def main(args):
             data.attrs = {k.upper(): v for k, v in data.attrs.items()}
 
             try:
-                latitude = data[lat_c].to_numpy()
+                latitude = data['y'].to_numpy()
 
                 if latitude[1] - latitude[0] >= 0:
                     print(f'Flipping latitude for {var_name}')
-                    data = data.isel({lat_c: slice(None, None, -1)})
+                    data = data.isel({'y': slice(None, None, -1)})
             except Exception as e:
                 print(f'Could not check latitude ordering for {var_name} due to {e}')
 
