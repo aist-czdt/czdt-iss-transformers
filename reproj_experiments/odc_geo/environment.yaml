@@ -1,0 +1,13 @@
+name: odc_geo_notebook
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python<3.13
+  - xarray
+  - rioxarray
+  - odc-geo
+  - jupyter
+  - matplotlib
+  - dask
+
