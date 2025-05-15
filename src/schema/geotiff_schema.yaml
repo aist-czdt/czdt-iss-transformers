@@ -1,0 +1,15 @@
+bbox: include('bbox', required=False)
+resolution_deg: num(min=0.0)
+filename_pattern: py_re()
+timestamp:
+  group: str()
+  dt_string: str()
+  round_down_to: enum('year', 'month', 'day', 'hour', 'minute', 'second', required=False)
+
+---
+
+bbox:
+  min_lat: num(min=-90.0, max=90.0)
+  max_lat: num(min=-90.0, max=90.0)
+  min_lon: num(min=-180.0, max=180.0)
+  max_lon: num(min=-180.0, max=180.0)

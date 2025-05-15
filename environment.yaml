@@ -13,4 +13,6 @@ dependencies:
   - fsspec==2025.3.2
   - aiobotocore==2.21.1
   - rioxarray
+  - yamale
+  - odc-geo
 
