@@ -1,18 +1,18 @@
-import yamale
-import re
-from yamale.validators import Validator, DefaultValidators
-import xarray as xr
-import numpy as np
 import os
-import rioxarray
-from odc.geo.geobox import GeoBox
-from rioxarray.merge import merge_datasets
-from odc.geo.xr import ODCExtensionDs, xr_zeros
-from odc.geo.xr import xr_reproject as reproject
-import yaml
-from typing import Tuple
+import re
 from datetime import datetime
+from typing import Tuple
 
+import numpy as np
+import rioxarray
+import xarray as xr
+import yamale
+import yaml
+from odc.geo.geobox import GeoBox
+# from odc.geo.xr import ODCExtensionDs
+from odc.geo.xr import xr_reproject as reproject
+from rioxarray.merge import merge_datasets
+from yamale.validators import Validator, DefaultValidators
 
 DT_UNITS = ['year', 'month', 'day', 'hour', 'minute', 'second', 'microsecond']
 UNIT_STARTS = dict(year=0, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -29,8 +29,44 @@ class PythonRegexValidator(Validator):
             return False
 
 
-def _open_tiff(path, var_name):
-    return rioxarray.open_rasterio(path).to_dataset('band').rename({1: var_name})
+class GeoTiffBandMapValidator(Validator):
+    tag = "geotiff_band_map"
+
+    def _is_valid(self, value):
+        # Value must be dict
+        if not isinstance(value, dict):
+            return False
+
+        # Must contain at least one mapping
+        if len(value) == 0:
+            return False
+
+        keys = list(value.keys())
+        values = list(value.values())
+
+        # Value must be dict of int -> str
+        if any([not isinstance(k, int) for k in keys]):
+            return False
+        if any([not isinstance(v, str) for v in values]):
+            return False
+
+        # Dict keys must be integers starting at 1 and incrementing by one
+        if set(keys) != set(range(1, len(keys)+1)):
+            return False
+
+        # Values must all be unique
+        if len(set(values)) != len(values):
+            return False
+
+        return True
+
+    def fail(self, value):
+        return (f'{self.get_name()} must be a flat dict mapping incrementing integers starting at one to a set of '
+                f'unique strings')
+
+
+def _open_tiff(path, band_map):
+    return rioxarray.open_rasterio(path).to_dataset('band').rename(band_map)
 
 
 def _get_bbox_from_config(config) -> Tuple[float, float, float, float]:
@@ -83,6 +119,7 @@ def test2(schema):
 
     validators = DefaultValidators.copy()
     validators[PythonRegexValidator.tag] = PythonRegexValidator
+    validators[GeoTiffBandMapValidator.tag] = GeoTiffBandMapValidator
 
     schema = yamale.make_schema(schema, validators=validators)
     data = yamale.make_data(test_cfg)
@@ -105,7 +142,9 @@ def test2(schema):
         ts = datetime.strptime(ts_string, config['timestamp']['dt_string'])
 
         if 'round_down_to' in config['timestamp']:
-            ts = ts.replace(**{u: UNIT_STARTS[u] for u in DT_UNITS[DT_UNITS.index(config['timestamp']['round_down_to'])+1:]})
+            ts = ts.replace(
+                **{u: UNIT_STARTS[u] for u in DT_UNITS[DT_UNITS.index(config['timestamp']['round_down_to'])+1:]}
+            )
 
         times.setdefault(ts, []).append(tiff)
 
@@ -119,10 +158,10 @@ def test2(schema):
 
     for timestamp in sorted(times.keys()):
         times[timestamp] = merge_datasets(
-            [_open_tiff(f, 'WTR') for f in times[timestamp]]
+            [_open_tiff(f, config['band_map']) for f in times[timestamp]]
         )
 
-        reprojected = reproject(src=times[timestamp], how=gbox, resampling='nearest')
+        reprojected = reproject(src=times[timestamp], how=gbox, resampling='nearest', dst_nodata=255)
 
         reprojected = reprojected.expand_dims('time').assign_coords(
             time=[np.datetime64(timestamp, 'ns')]

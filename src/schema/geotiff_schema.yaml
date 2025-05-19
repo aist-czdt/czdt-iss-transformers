@@ -5,6 +5,8 @@ timestamp:
   group: str()
   dt_string: str()
   round_down_to: enum('year', 'month', 'day', 'hour', 'minute', 'second', required=False)
+band_map: geotiff_band_map()
+nodata: num(required=False)
 
 ---
 
