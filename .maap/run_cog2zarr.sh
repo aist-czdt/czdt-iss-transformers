@@ -7,7 +7,7 @@ root_dir=$(dirname "${basedir}")
 CONFIG_FILE=$(ls -d input/*)
 mkdir -p output
 source activate cf2zarr
-python "${root_dir}"/src/zarr2cog.py \
+python "${root_dir}"/src/cog2zarr.py \
   --input-s3 $1 \
   --config $CONFIG_FILE \
   --pattern $2 \
