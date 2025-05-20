@@ -10,6 +10,6 @@ source activate cf2zarr
 python "${root_dir}"/src/zarr2cog.py \
   --input-s3 $1 \
   --config $CONFIG_FILE \
-  --pattern $3 \
-  $([[ $4 != "none" ]] && echo --duration $4)\
-  --output $5
+  --pattern $2 \
+  $([[ $3 != "none" ]] && echo --duration $3)\
+  --output $4
