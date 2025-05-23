@@ -7,8 +7,8 @@ root_dir=$(dirname "${basedir}")
 mkdir -p output
 source activate cf2zarr
 python "${root_dir}"/src/zarr_concat.py \
-  --zarr-manifest $1 \
-  --zarr-access $2 \
-  --time-dim $3 \
+  $([ -n "$1" ] && echo $1)\
+  --zarr-manifest $2 \
+  --zarr-access $3 \
   $([[ $4 != "none" ]] && echo --duration $4)\
   --output $5

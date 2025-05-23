@@ -12,13 +12,11 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import zarr
-# from botocore.credentials import Credentials
-# from s3fs import S3FileSystem, S3Map
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
-from src.util import open_zarr
+from src.util import open_zarr, get_config
 
 staging_dirs = []
 
@@ -36,8 +34,10 @@ def __get_zarr_urls(args, client):
 
 
 def main(args):
-    dim = args.time_dim
     output = args.output
+
+    config = get_config(args.config)
+    dim = config['dimensions']['time']
 
     session = boto3.Session(profile_name=os.getenv('AWS_PROFILE', None))
     client = session.client('s3')
@@ -57,21 +57,12 @@ def main(args):
 
     print(f'Opened {len(datasets):,} zarr datasets')
 
-    ds = xr.concat(datasets, dim='time').sortby(dim)
+    ds = xr.concat(datasets, dim=dim).sortby(dim)
 
     print('New dataset:')
     print(ds)
 
-    time_coord = None
-
-    for coord in ds.coords:
-        coord = ds.coords[coord]
-        if coord.dims == (dim,):
-            time_coord = coord.name
-            break
-
-    if time_coord is None:
-        raise ValueError('Cannot determine time coordinate')
+    time_coord = config['coordinates']['time']
 
     # Dedup time steps
 
@@ -111,7 +102,7 @@ def main(args):
             print(f'Dropped {idx:,} time steps. New dataset duration: '
                   f'{pd.Timedelta((ds[time_coord][-1] - ds[time_coord][0]).data.item())}')
 
-    chunk_config = (24, 90, 90)
+    chunk_config = {config['dimensions'][d]: config['chunks'][d] for d in config['chunks']}
 
     # exit()
 
@@ -137,6 +128,13 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
+    parser.add_argument(
+        'config',
+        nargs='?',
+        default=None,
+        help='Path to config file'
+    )
+
     input_group = parser.add_mutually_exclusive_group(required=True)
 
     input_group.add_argument(
@@ -156,12 +154,6 @@ if __name__ == '__main__':
         default='stage',
         choices=['stage', 'mount'],
         help='stage: Download zarr data from S3 to local filesystem; mount: mount S3 to local filesystem'
-    )
-
-    parser.add_argument(
-        '-t', '--time-dim',
-        default='time',
-        help='Name of the time dimension'
     )
 
     parser.add_argument(

@@ -20,7 +20,6 @@ staging_dirs = []
 
 def main(args):
     pattern = args.pattern
-    # dim = args.time_dim
     variables = args.variables
     output = args.output
 
@@ -162,12 +161,6 @@ if __name__ == '__main__':
         default='stage',
         choices=['stage', 'mount'],
         help='stage: Download zarr data from S3 to local filesystem; mount: mount S3 to local filesystem'
-    )
-
-    parser.add_argument(
-        '-t', '--time-dim',
-        default='time',
-        help='Name of the time dimension'
     )
 
     parser.add_argument(
