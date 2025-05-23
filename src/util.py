@@ -1,13 +1,14 @@
-import tempfile
-from urllib.parse import urlparse
+import json
 import os
-from botocore.credentials import Credentials
-from s3fs import S3FileSystem, S3Map
-import xarray as xr
+import tempfile
 from typing import Optional, Tuple
+from urllib.parse import urlparse
+
+import xarray as xr
 import yamale
 import yaml
-
+from botocore.credentials import Credentials
+from s3fs import S3FileSystem, S3Map
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH = os.path.join(SCRIPT_DIR, 'schema', 'dataset_schema.yaml')
@@ -34,22 +35,27 @@ DEFAULT_CONFIG = {
 
 def get_config(path: str) -> dict:
     if path is None:
-        return DEFAULT_CONFIG
+        print('No config file provided, using default')
+        config = DEFAULT_CONFIG
+    else:
+        schema = yamale.make_schema(SCHEMA_PATH)
+        data = yamale.make_data(path)
 
-    schema = yamale.make_schema(SCHEMA_PATH)
-    data = yamale.make_data(path)
+        yamale.validate(schema, data, strict=True)
 
-    yamale.validate(schema, data, strict=True)
+        with open(path, 'r') as fp:
+            config_data = yaml.safe_load(fp)
 
-    with open(path, 'r') as fp:
-        config_data = yaml.safe_load(fp)
+        print(f'Validated and loaded config from {path}')
 
-    config = {
-        'chunks': config_data['chunks'],
-        'dimensions': config_data.get('dimensions', DEFAULT_CONFIG['dimensions']),
-    }
+        config = {
+            'chunks': config_data['chunks'],
+            'dimensions': config_data.get('dimensions', DEFAULT_CONFIG['dimensions']),
+        }
 
-    config['coordinates'] = config_data.get('coordinates', config['dimensions'])
+        config['coordinates'] = config_data.get('coordinates', config['dimensions'])
+
+    print(f'Final config:\n{json.dumps(config, indent=2)}')
 
     return config
 

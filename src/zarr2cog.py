@@ -1,18 +1,9 @@
 import argparse
-import json
 import os
 import shutil
 import sys
-import tempfile
-from urllib.parse import urlparse
 
 import boto3
-import numpy as np
-import pandas as pd
-import xarray as xr
-import zarr
-# from botocore.credentials import Credentials
-# from s3fs import S3FileSystem, S3Map
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
