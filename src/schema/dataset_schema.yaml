@@ -1,0 +1,14 @@
+chunks: include('chunks')
+dimensions: include('names', required=False)
+coordinates: include('names', required=False)
+
+---
+
+names:
+  time: str()
+  latitude: str()
+  longitude: str()
+chunks:
+  time: int(min=1)
+  latitude: int(min=1)
+  longitude: int(min=1)

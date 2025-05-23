@@ -5,6 +5,53 @@ from botocore.credentials import Credentials
 from s3fs import S3FileSystem, S3Map
 import xarray as xr
 from typing import Optional, Tuple
+import yamale
+import yaml
+
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SCHEMA_PATH = os.path.join(SCRIPT_DIR, 'schema', 'dataset_schema.yaml')
+
+
+DEFAULT_CONFIG = {
+    'chunks': {
+        'time': 24,
+        'latitude': 90,
+        'longitude': 90
+    },
+    'dimensions': {
+        'time': 'time',
+        'latitude': 'latitude',
+        'longitude': 'longitude'
+    },
+    'coordinates': {
+        'time': 'time',
+        'latitude': 'latitude',
+        'longitude': 'longitude'
+    }
+}
+
+
+def get_config(path: str) -> dict:
+    if path is None:
+        return DEFAULT_CONFIG
+
+    schema = yamale.make_schema(SCHEMA_PATH)
+    data = yamale.make_data(path)
+
+    yamale.validate(schema, data, strict=True)
+
+    with open(path, 'r') as fp:
+        config_data = yaml.safe_load(fp)
+
+    config = {
+        'chunks': config_data['chunks'],
+        'dimensions': config_data.get('dimensions', DEFAULT_CONFIG['dimensions']),
+    }
+
+    config['coordinates'] = config_data.get('coordinates', config['dimensions'])
+
+    return config
 
 
 def stage_s3(prefix_url: str, client) -> str:
