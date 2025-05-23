@@ -296,7 +296,11 @@ def main(args):
             print(f'Dropped {idx:,} time steps. New dataset duration: '
                   f'{pd.Timedelta((final_ds["time"][-1] - final_ds["time"][0]).data.item())}')
 
-    chunk_config = (24, 500, 500)
+    chunk_config = config.get('chunks', {
+        'time': 24,
+        'latitude': 90,
+        'longitude': 90,
+    })
     print(f'Setting chunk config: {chunk_config}')
 
     for var in final_ds.data_vars:
