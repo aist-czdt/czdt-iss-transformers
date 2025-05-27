@@ -1,5 +1,6 @@
 bbox: include('bbox', required=False)
 resolution_deg: num(min=0.0)
+resampling_method: enum('nearest', 'average', 'bilinear', 'cubic', 'cubic_spline', 'lanczos', 'mode', 'gauss', 'max', 'min', 'med', 'q1', 'q3', required=False)
 chunks: include('chunk_cfg', required=False)
 filename_pattern: py_re()
 timestamp:

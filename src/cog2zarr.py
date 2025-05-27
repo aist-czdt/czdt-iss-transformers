@@ -257,6 +257,7 @@ def main(args):
     )
 
     reprojected_slices = []
+    resampling_method = config.get('resampling_method', 'nearest')
 
     for timestamp in sorted(times.keys()):
         print(f'Opening and merging {len(times[timestamp])} tiffs for timestamp {timestamp}')
@@ -265,7 +266,12 @@ def main(args):
         )
 
         print('Reprojecting to EPSG:4326')
-        reprojected = reproject(src=times[timestamp], how=gbox, resampling='nearest', dst_nodata=255)
+        reprojected = reproject(
+            src=times[timestamp],
+            how=gbox,
+            resampling=resampling_method,
+            dst_nodata=255
+        )
 
         print('Adding timestamp')
         reprojected = reprojected.expand_dims('time').assign_coords(

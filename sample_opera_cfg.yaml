@@ -4,6 +4,7 @@ bbox:
   max_lat: 53.28
   max_lon: -67.85
 resolution_deg: 0.0002
+resampling_method: nearest
 chunks:
   time: 7
   latitude: 500
