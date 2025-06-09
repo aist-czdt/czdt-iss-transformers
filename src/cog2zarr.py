@@ -16,7 +16,6 @@ import yamale
 import yaml
 import zarr
 from odc.geo.geobox import GeoBox
-# from odc.geo.xr import ODCExtensionDs
 from odc.geo.xr import xr_reproject as reproject
 from rioxarray.merge import merge_datasets
 from yamale.validators import Validator, DefaultValidators
@@ -102,100 +101,6 @@ def _get_bbox_from_config(config) -> Tuple[float, float, float, float]:
         return -180.0, -90.0, 180.0, 90.0
 
 
-def test(schema):
-    test_data_dir = '/Users/rileykk/czdt/czdt-iss-cf2zarr/reproj_experiments/odc_geo/data/OPERA_L3_DSWx-S1/WTR'
-    test_cfg = '/Users/rileykk/czdt/czdt-iss-cf2zarr/sample_opera_cfg.yaml'
-
-    validators = DefaultValidators.copy()
-    validators[PythonRegexValidator.tag] = PythonRegexValidator
-
-    schema = yamale.make_schema(schema, validators=validators)
-    data = yamale.make_data(test_cfg)
-
-    yamale.validate(schema, data, strict=True)
-
-    with open(test_cfg, 'r') as fp:
-        config = yaml.safe_load(fp)
-
-    assert config['resolution_deg'] > 0
-
-    tiles = [_open_tiff(os.path.join(test_data_dir, f), 'WTR') for f in os.listdir(test_data_dir) if f.endswith('.tif')]
-
-    merged = merge_datasets(tiles)
-
-    gbox = GeoBox.from_bbox(
-        _get_bbox_from_config(config),
-        "epsg:4326",
-        resolution=config['resolution_deg'],
-    )
-
-    reprojected = reproject(src=merged, how=gbox, resampling='nearest')
-
-    print(reprojected)
-
-
-def test2(schema):
-    test_data_dir = '/Users/rileykk/czdt/czdt-iss-cf2zarr/reproj_experiments/odc_geo/data/OPERA_L3_DSWx-S1/WTR'
-    test_cfg = '/Users/rileykk/czdt/czdt-iss-cf2zarr/sample_opera_cfg.yaml'
-
-    validators = DefaultValidators.copy()
-    validators[PythonRegexValidator.tag] = PythonRegexValidator
-    validators[GeoTiffBandMapValidator.tag] = GeoTiffBandMapValidator
-
-    schema = yamale.make_schema(schema, validators=validators)
-    data = yamale.make_data(test_cfg)
-
-    yamale.validate(schema, data, strict=True)
-
-    with open(test_cfg, 'r') as fp:
-        config = yaml.safe_load(fp)
-
-    assert config['resolution_deg'] > 0
-
-    times = {}
-    filename_pattern = re.compile(config['filename_pattern'])
-
-    for tiff in [os.path.join(test_data_dir, f) for f in os.listdir(test_data_dir) if f.endswith('.tif')]:
-        match = filename_pattern.match(os.path.basename(tiff))
-        assert match is not None
-
-        ts_string = match.groupdict()[config['timestamp']['group']]
-        ts = datetime.strptime(ts_string, config['timestamp']['dt_string'])
-
-        if 'round_down_to' in config['timestamp']:
-            ts = ts.replace(
-                **{u: UNIT_STARTS[u] for u in DT_UNITS[DT_UNITS.index(config['timestamp']['round_down_to'])+1:]}
-            )
-
-        times.setdefault(ts, []).append(tiff)
-
-    gbox = GeoBox.from_bbox(
-        _get_bbox_from_config(config),
-        "epsg:4326",
-        resolution=config['resolution_deg'],
-    )
-
-    reprojected_slices = []
-
-    for timestamp in sorted(times.keys()):
-        times[timestamp] = merge_datasets(
-            [_open_tiff(f, config['band_map']) for f in times[timestamp]]
-        )
-
-        reprojected = reproject(src=times[timestamp], how=gbox, resampling='nearest', dst_nodata=255)
-
-        reprojected = reprojected.expand_dims('time').assign_coords(
-            time=[np.datetime64(timestamp, 'ns')]
-        )
-
-        reprojected_slices.append(reprojected)
-
-    final_ds = xr.concat(reprojected_slices, dim='time').sortby('time')
-
-    print(final_ds)
-    final_ds.to_netcdf('/Users/rileykk/czdt/czdt-iss-cf2zarr/test.nc')
-
-
 def main(args):
     config_path = args.config
     pattern = args.pattern
@@ -211,9 +116,6 @@ def main(args):
 
     with open(config_path, 'r') as fp:
         config = yaml.safe_load(fp)
-
-    if config['resolution_deg'] <= 0:
-        raise ValueError('resolution_deg must be greater than zero')
 
     input_stage_dir = stage_s3(args.input_s3, client)
     staging_dirs.append(input_stage_dir)
@@ -250,12 +152,6 @@ def main(args):
 
     print(f'Mapped inputs to {len(times)} times')
 
-    gbox = GeoBox.from_bbox(
-        _get_bbox_from_config(config),
-        "epsg:4326",
-        resolution=config['resolution_deg'],
-    )
-
     reprojected_slices = []
     resampling_method = config.get('resampling_method', 'nearest')
 
@@ -265,13 +161,26 @@ def main(args):
             [_open_tiff(f, config['band_map']) for f in times[timestamp]]
         )
 
-        print('Reprojecting to EPSG:4326')
-        reprojected = reproject(
-            src=times[timestamp],
-            how=gbox,
-            resampling=resampling_method,
-            dst_nodata=255
-        )
+        if times[timestamp].rio.crs.to_epsg() != 4326:
+            if config['resolution_deg'] <= 0:
+                raise ValueError('resolution_deg must be greater than zero')
+
+            gbox = GeoBox.from_bbox(
+                _get_bbox_from_config(config),
+                "epsg:4326",
+                resolution=config['resolution_deg'],
+            )
+
+            print('Reprojecting to EPSG:4326')
+            reprojected = reproject(
+                src=times[timestamp],
+                how=gbox,
+                resampling=resampling_method,
+                dst_nodata=255
+            )
+        else:
+            print('Data in required projection. Using native data')
+            reprojected = times[timestamp]
 
         print('Adding timestamp')
         reprojected = reprojected.expand_dims('time').assign_coords(
@@ -374,4 +283,3 @@ if __name__ == '__main__':
                 shutil.rmtree(sd)
             except:
                 print(f'Failed to remove staging dir: {sd}')
-
