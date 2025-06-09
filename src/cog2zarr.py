@@ -202,7 +202,7 @@ def main(args):
             )
         else:
             print('Data in required projection. Using native data')
-            reprojected = times[timestamp]
+            reprojected = times[timestamp].rename(x='longitude', y='latitude')
 
         print('Adding timestamp')
         reprojected = reprojected.expand_dims('time').assign_coords(
