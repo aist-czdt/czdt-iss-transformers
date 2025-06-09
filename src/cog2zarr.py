@@ -85,8 +85,20 @@ VALIDATORS[PythonRegexValidator.tag] = PythonRegexValidator
 VALIDATORS[GeoTiffBandMapValidator.tag] = GeoTiffBandMapValidator
 
 
-def _open_tiff(path, band_map):
-    return rioxarray.open_rasterio(path).to_dataset('band').rename(band_map)
+def _open_tiff(path, config):
+    tiff_ds = rioxarray.open_rasterio(path).to_dataset('band').rename(config['band_map'])
+
+    # Coerce the data arrays to dask to handle very large datasets
+    chunk_config = config.get('chunks', {
+        'time': 24,
+        'latitude': 90,
+        'longitude': 90,
+    })
+
+    for var in tiff_ds.data_vars:
+        tiff_ds[var] = tiff_ds[var].chunk(x=chunk_config['longitude'], y=chunk_config['latitude'])
+
+    return tiff_ds
 
 
 def _get_bbox_from_config(config) -> Tuple[float, float, float, float]:
@@ -134,6 +146,12 @@ def main(args):
     if len(input_tiffs) == 0:
         raise ValueError('no tiffs found in input dir')
 
+    chunk_config = config.get('chunks', {
+        'time': 24,
+        'latitude': 90,
+        'longitude': 90,
+    })
+
     for tiff in input_tiffs:
         match = filename_pattern.match(os.path.basename(tiff))
         if match is None:
@@ -158,7 +176,7 @@ def main(args):
     for timestamp in sorted(times.keys()):
         print(f'Opening and merging {len(times[timestamp])} tiffs for timestamp {timestamp}')
 
-        tiffs = [_open_tiff(f, config['band_map']) for f in times[timestamp]]
+        tiffs = [_open_tiff(f, config) for f in times[timestamp]]
 
         if len(tiffs) > 1:
             times[timestamp] = merge_datasets(tiffs)
@@ -215,11 +233,6 @@ def main(args):
             print(f'Dropped {idx:,} time steps. New dataset duration: '
                   f'{pd.Timedelta((final_ds["time"][-1] - final_ds["time"][0]).data.item())}')
 
-    chunk_config = config.get('chunks', {
-        'time': 24,
-        'latitude': 90,
-        'longitude': 90,
-    })
     print(f'Setting chunk config: {chunk_config}')
 
     for var in final_ds.data_vars:
