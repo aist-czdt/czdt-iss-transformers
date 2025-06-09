@@ -176,7 +176,7 @@ def main(args):
                 src=times[timestamp],
                 how=gbox,
                 resampling=resampling_method,
-                dst_nodata=255
+                dst_nodata=config.get('nodata', 'auto'),
             )
         else:
             print('Data in required projection. Using native data')
