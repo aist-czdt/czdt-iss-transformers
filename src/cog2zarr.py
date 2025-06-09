@@ -157,9 +157,13 @@ def main(args):
 
     for timestamp in sorted(times.keys()):
         print(f'Opening and merging {len(times[timestamp])} tiffs for timestamp {timestamp}')
-        times[timestamp] = merge_datasets(
-            [_open_tiff(f, config['band_map']) for f in times[timestamp]]
-        )
+
+        tiffs = [_open_tiff(f, config['band_map']) for f in times[timestamp]]
+
+        if len(tiffs) > 1:
+            times[timestamp] = merge_datasets(tiffs)
+        else:
+            times[timestamp] = tiffs[0]
 
         if times[timestamp].rio.crs.to_epsg() != 4326:
             if config['resolution_deg'] <= 0:
