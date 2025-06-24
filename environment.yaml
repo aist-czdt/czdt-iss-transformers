@@ -7,6 +7,7 @@ dependencies:
   - netCDF4
   - dask
   - zarr==2.15.0
+  - cftime
   - pandas
   - boto3
   - s3fs==2025.3.2
