@@ -6,5 +6,5 @@ root_dir=$(dirname "${basedir}")
 
 pushd "${root_dir}"
 conda env update -f environment.yaml
-conda list
+conda list -n cf2zarr
 popd
