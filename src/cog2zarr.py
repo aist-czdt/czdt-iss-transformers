@@ -15,11 +15,11 @@ import xarray as xr
 import yamale
 import yaml
 
-from numcodecs import Blosc
 from odc.geo.geobox import GeoBox
 from odc.geo.xr import xr_reproject as reproject
 from rioxarray.merge import merge_datasets
 from yamale.validators import Validator, DefaultValidators
+from zarr.codecs import BloscCodec as Blosc
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH = os.path.join(SCRIPT_DIR, 'schema', 'geotiff_schema.yaml')
