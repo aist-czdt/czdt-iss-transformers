@@ -14,7 +14,8 @@ import rioxarray
 import xarray as xr
 import yamale
 import yaml
-import zarr
+
+from numcodecs import Blosc
 from odc.geo.geobox import GeoBox
 from odc.geo.xr import xr_reproject as reproject
 from rioxarray.merge import merge_datasets
@@ -243,7 +244,7 @@ def main(args):
     for var in final_ds.data_vars:
         final_ds[var] = final_ds[var].chunk(chunk_config)
 
-    compressor = zarr.Blosc(cname="blosclz", clevel=9)
+    compressor = Blosc(cname="blosclz", clevel=9)
     encoding = {vname: {'compressor': compressor} for vname in final_ds.data_vars}
 
     print(f'Writing to zarr file: {os.path.join("output", output)}')

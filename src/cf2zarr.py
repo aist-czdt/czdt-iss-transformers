@@ -8,7 +8,8 @@ import boto3
 import numpy as np
 import pandas as pd
 import xarray as xr
-import zarr
+
+from numcodecs import Blosc
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
@@ -118,7 +119,7 @@ def main(args):
     for var in ds.data_vars:
         ds[var] = ds[var].chunk(chunk_config)
 
-    compressor = zarr.Blosc(cname="blosclz", clevel=9)
+    compressor = Blosc(cname="blosclz", clevel=9)
     encoding = {vname: {'compressor': compressor} for vname in ds.data_vars}
 
     print(f'Writing to zarr file: {os.path.join("output", output)}')

@@ -16,4 +16,5 @@ dependencies:
   - rioxarray
   - yamale
   - odc-geo
+  - numcodecs
 
