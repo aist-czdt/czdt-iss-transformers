@@ -6,7 +6,7 @@ dependencies:
   - xarray
   - netCDF4
   - dask
-  - zarr==2.15.0
+  - zarr # ==2.15.0
   - cftime
   - pandas
   - boto3
