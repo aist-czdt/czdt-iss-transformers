@@ -14,4 +14,4 @@ python "${root_dir}"/src/cf2zarr.py \
   --pattern "$5" \
   $([[ $6 != "none" ]] && echo --duration $6)\
   --output $7 \
-  --variables ${@:8}
+  --variables "${@:8}"
