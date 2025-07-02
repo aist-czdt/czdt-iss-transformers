@@ -53,15 +53,16 @@ def main(args):
         variables = []
 
     variable_name = list(new_ds.data_vars.keys())[0]  # Automatically pick the first variable
-    if len(variables) == 0:
-        if ds is None:
-            variables = [variable_name]
-        else:
-            variables = list(ds.data_vars)
 
-    print(f'Subselecting vars: {variables}')
+    if variable_name == '*':
+        print('All variables selected - skipping subselection')
+    else:
+        if len(variables) == 0:
+            variables = [variable_name] if ds is None else list(ds.data_vars)
 
-    new_ds = new_ds[variables]
+        print(f'Subselecting vars: {variables}')
+
+        new_ds = new_ds[variables]
 
     if ds is not None:
         ds = xr.concat((ds, new_ds), dim=dim).sortby(dim)
