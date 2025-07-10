@@ -21,8 +21,13 @@ staging_dirs = []
 
 def main(args):
     pattern = args.pattern
-    variables = args.variables
+    # variables = args.variables
     output = args.output
+
+    variables = []
+
+    for v in args.variables:
+        variables.extend(v.split(','))
 
     config = get_config(args.config)
     dim = config['dimensions']['time']
