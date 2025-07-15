@@ -207,10 +207,10 @@ def main(args):
             print('Data in required projection. Using native data')
             reprojected = times[timestamp].rename(x='longitude', y='latitude')
 
-            if 'nodata' in config:
-                for var in reprojected.data_vars:
-                    print(f'Masking nodata values of {config["nodata"]} in {var}')
-                    reprojected[var] = reprojected[var].where(reprojected[var] != config['nodata'])
+        if 'nodata' in config:
+            for var in reprojected.data_vars:
+                print(f'Masking nodata values of {config["nodata"]} in {var}')
+                reprojected[var] = reprojected[var].where(reprojected[var] != config['nodata'])
 
         print('Adding timestamp')
         reprojected = reprojected.expand_dims('time').assign_coords(
