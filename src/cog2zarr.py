@@ -174,6 +174,14 @@ def main(args):
     reprojected_slices = []
     resampling_method = config.get('resampling_method', 'nearest')
 
+    gbox = GeoBox.from_bbox(
+        _get_bbox_from_config(config),
+        "epsg:4326",
+        resolution=config['resolution_deg'],
+    )
+
+    print(f'Target bbox for mapping: {gbox}')
+
     for timestamp in sorted(times.keys()):
         print(f'Opening and merging {len(times[timestamp])} tiffs for timestamp {timestamp}')
 
@@ -187,12 +195,6 @@ def main(args):
         if times[timestamp].rio.crs.to_epsg() != 4326:
             if config['resolution_deg'] <= 0:
                 raise ValueError('resolution_deg must be greater than zero')
-
-            gbox = GeoBox.from_bbox(
-                _get_bbox_from_config(config),
-                "epsg:4326",
-                resolution=config['resolution_deg'],
-            )
 
             print('Reprojecting to EPSG:4326')
             reprojected = reproject(
