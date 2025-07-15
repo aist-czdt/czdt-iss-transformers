@@ -205,7 +205,9 @@ def main(args):
             )
 
             for var in reprojected.data_vars:
-                reprojected[var] = reprojected[var].astype(times[timestamp][var].dtype)
+                if reprojected[var].dtype != times[timestamp].dtype:
+                    print(f'Casting {var} from {reprojected[var].dtype} back to {times[timestamp].dtype}')
+                    reprojected[var] = reprojected[var].astype(times[timestamp][var].dtype)
         else:
             print('Data in required projection. Using native data')
             reprojected = times[timestamp].rename(x='longitude', y='latitude')
