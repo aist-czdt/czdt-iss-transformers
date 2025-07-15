@@ -203,6 +203,9 @@ def main(args):
                 resampling=resampling_method,
                 dst_nodata=config.get('nodata', 'auto'),
             )
+
+            for var in reprojected.data_vars:
+                reprojected[var] = reprojected[var].astype(times[timestamp][var].dtype)
         else:
             print('Data in required projection. Using native data')
             reprojected = times[timestamp].rename(x='longitude', y='latitude')
@@ -211,6 +214,7 @@ def main(args):
             for var in reprojected.data_vars:
                 print(f'Masking nodata values of {config["nodata"]} in {var}')
                 reprojected[var] = reprojected[var].where(reprojected[var] != config['nodata'])
+                reprojected[var].attrs['_FillValue'] = config['nodata']
 
         print('Adding timestamp')
         reprojected = reprojected.expand_dims('time').assign_coords(
