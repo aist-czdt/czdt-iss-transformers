@@ -211,6 +211,7 @@ def main(args):
             )
 
             for var in reprojected.data_vars:
+                print(reprojected[var].dtype, times[timestamp][var].dtype)
                 if reprojected[var].dtype != times[timestamp][var].dtype:
                     print(f'Casting {var} from {reprojected[var].dtype} back to {times[timestamp][var].dtype}')
                     reprojected[var] = reprojected[var].astype(times[timestamp][var].dtype)
