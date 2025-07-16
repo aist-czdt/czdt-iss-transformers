@@ -222,11 +222,11 @@ def main(args):
         print(f'debug (post reproj): {reprojected}')
         print(f'debug (post reproj): {reprojected[list(reprojected.data_vars)[0]]}')
 
-        if 'nodata' in config:
-            for var in reprojected.data_vars:
-                # print(f'Masking nodata values of {config["nodata"]} in {var}')
-                # reprojected[var] = reprojected[var].where(reprojected[var] != config['nodata'])
-                reprojected[var].attrs['_FillValue'] = config['nodata']
+        # if 'nodata' in config:
+        #     for var in reprojected.data_vars:
+        #         # print(f'Masking nodata values of {config["nodata"]} in {var}')
+        #         # reprojected[var] = reprojected[var].where(reprojected[var] != config['nodata'])
+        #         reprojected[var].attrs['_FillValue'] = config['nodata']
 
         print('Adding timestamp')
         reprojected = reprojected.expand_dims('time').assign_coords(
@@ -264,6 +264,10 @@ def main(args):
 
     compressor = Blosc(cname="blosclz", clevel=9)
     encoding = {vname: {'compressor': compressor} for vname in final_ds.data_vars}
+
+    if 'nodata' in config:
+        for var in final_ds.data_vars:
+            encoding[var]['fill_value'] = config['nodata']
 
     print(f'Writing to zarr file: {os.path.join("output", output)}')
 
