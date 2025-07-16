@@ -224,8 +224,8 @@ def main(args):
 
         if 'nodata' in config:
             for var in reprojected.data_vars:
-                print(f'Masking nodata values of {config["nodata"]} in {var}')
-                reprojected[var] = reprojected[var].where(reprojected[var] != config['nodata'])
+                # print(f'Masking nodata values of {config["nodata"]} in {var}')
+                # reprojected[var] = reprojected[var].where(reprojected[var] != config['nodata'])
                 reprojected[var].attrs['_FillValue'] = config['nodata']
 
         print('Adding timestamp')
