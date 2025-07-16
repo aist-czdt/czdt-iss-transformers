@@ -219,6 +219,9 @@ def main(args):
             print('Data in required projection. Using native data')
             reprojected = times[timestamp].rename(x='longitude', y='latitude')
 
+        print(f'debug (post reproj): {reprojected}')
+        print(f'debug (post reproj): {reprojected[list(reprojected.data_vars)[0]]}')
+
         if 'nodata' in config:
             for var in reprojected.data_vars:
                 print(f'Masking nodata values of {config["nodata"]} in {var}')
