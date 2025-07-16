@@ -89,7 +89,7 @@ VALIDATORS[GeoTiffBandMapValidator.tag] = GeoTiffBandMapValidator
 def _open_tiff(path, config):
     tiff_ds = rioxarray.open_rasterio(path).to_dataset('band').rename(config['band_map'])
 
-    print(f'debug (open1): {tiff_ds=}')
+    # print(f'debug (open1): {tiff_ds=}')
 
     # Coerce the data arrays to dask to handle very large datasets
     chunk_config = config.get('chunks', {
@@ -101,7 +101,7 @@ def _open_tiff(path, config):
     for var in tiff_ds.data_vars:
         tiff_ds[var] = tiff_ds[var].chunk(x=chunk_config['longitude'], y=chunk_config['latitude'])
 
-    print(f'debug (open2): {tiff_ds=}')
+    # print(f'debug (open2): {tiff_ds=}')
 
     return tiff_ds
 
@@ -196,7 +196,7 @@ def main(args):
         else:
             times[timestamp] = tiffs[0]
 
-        print(f'debug (postMerge): {times[timestamp]}')
+        # print(f'debug (postMerge): {times[timestamp]}')
 
         if times[timestamp].rio.crs.to_epsg() != 4326:
             if config['resolution_deg'] <= 0:
@@ -219,8 +219,8 @@ def main(args):
             print('Data in required projection. Using native data')
             reprojected = times[timestamp].rename(x='longitude', y='latitude')
 
-        print(f'debug (post reproj): {reprojected}')
-        print(f'debug (post reproj): {reprojected[list(reprojected.data_vars)[0]]}')
+        # print(f'debug (post reproj): {reprojected}')
+        # print(f'debug (post reproj): {reprojected[list(reprojected.data_vars)[0]]}')
 
         # if 'nodata' in config:
         #     for var in reprojected.data_vars:
