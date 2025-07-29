@@ -2,8 +2,14 @@ import argparse
 import os
 import shutil
 import sys
+from urllib.parse import urlparse
+from datetime import datetime
+from pathlib import Path
 
 import boto3
+import xarray as xr
+import pystac
+from shapely.geometry import Polygon, mapping
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
@@ -23,23 +29,114 @@ DRIVER_OPTIONS = [
 ]
 
 
-def main(args):
-    zarr_url = args.zarr
-    time_c = args.time
-    lat_c = args.latitude
-    lon_c = args.longitude
+def open_zarr_dataset(zarr_url, zarr_access):
+    parsed_url = urlparse(zarr_url)
+
+    if parsed_url.scheme in ('', 'file'):
+        print(f'Opening local zarr dataset at {zarr_url}')
+        ds = xr.open_zarr(zarr_url, consolidated=True)
+        print(ds)
+        return ds
 
     session = boto3.Session(profile_name=os.getenv('AWS_PROFILE', None))
     client = session.client('s3')
     credentials = session.get_credentials().get_frozen_credentials()
 
-    ds, stage_dir = open_zarr(zarr_url, args.zarr_access, client, credentials)
+    ds, stage_dir = open_zarr(zarr_url, zarr_access, client, credentials)
 
     if stage_dir is not None:
         staging_dirs.append(stage_dir)
 
     print(f'Opened zarr dataset at {zarr_url}')
     print(ds)
+    return ds
+
+
+def extract_bounds(data):
+    """Extract spatial bounds from xarray DataArray.
+    
+    Args:
+        data (xr.DataArray): Rasterized data with x/y coordinates
+        
+    Returns:
+        tuple: (minx, miny, maxx, maxy) in EPSG:4326
+    """
+    x_coords = data.coords['x'].values
+    y_coords = data.coords['y'].values
+    
+    minx, maxx = float(x_coords.min()), float(x_coords.max())
+    miny, maxy = float(y_coords.min()), float(y_coords.max())
+    
+    return (minx, miny, maxx, maxy)
+
+
+def create_stac_item(cog_path, datetime_obj, bounds, var_attrs, global_attrs, collection_id):
+    """Create STAC Item from COG file metadata.
+    
+    Args:
+        cog_path (str): Path to COG file
+        datetime_obj (datetime): Timestamp for the data
+        bounds (tuple): Spatial bounds (minx, miny, maxx, maxy)
+        var_attrs (dict): Variable attributes from Zarr
+        global_attrs (dict): Global attributes from Zarr dataset
+        collection_id (str): Collection ID to reference
+        
+    Returns:
+        pystac.Item: STAC item object
+    """
+    # Create bounding box and geometry
+    minx, miny, maxx, maxy = bounds
+    bbox = [minx, miny, maxx, maxy]
+    
+    # Create polygon geometry
+    geometry = mapping(Polygon.from_bounds(minx, miny, maxx, maxy))
+    
+    # Generate item ID from filename
+    item_id = Path(cog_path).stem
+    
+    # Create STAC item
+    item = pystac.Item(
+        id=item_id,
+        geometry=geometry,
+        bbox=bbox,
+        datetime=datetime_obj,
+        properties={}
+    )
+    
+    # Add variable-specific properties
+    for key, value in var_attrs.items():
+        if isinstance(value, (str, int, float, bool)):
+            item.properties[f"var:{key}"] = value
+    
+    # Add selected global properties
+    global_props = ['Title', 'Institution', 'Source', 'Conventions']
+    for prop in global_props:
+        if prop in global_attrs:
+            item.properties[f"global:{prop}"] = global_attrs[prop]
+    
+    # Add COG asset
+    item.add_asset(
+        key="cog",
+        asset=pystac.Asset(
+            href=cog_path,
+            media_type="image/tiff; application=geotiff; profile=cloud-optimized",
+            roles=["data"]
+        )
+    )
+    
+    # Link to collection
+    item.collection_id = collection_id
+    
+    return item
+
+
+def main(args):
+    zarr_url = args.zarr
+    time_c = args.time
+    lat_c = args.latitude
+    lon_c = args.longitude
+
+    ds = open_zarr_dataset(zarr_url, args.zarr_access)
 
     print(f'{len(ds.data_vars)} variables, {len(ds[time_c])} time steps')
 
@@ -71,6 +168,34 @@ def main(args):
             print(f'Writing timestep {dt} to {out_path}')
 
             data.rio.to_raster(out_path, driver='COG', sharing=False, **DRIVER_KWARGS)
+            
+            # Create STAC item for this COG file
+            try:
+                # Extract spatial bounds
+                bounds = extract_bounds(data)
+                
+                # Create collection ID
+                collection_id = f"{args.concept_id}-{var_name}"
+                
+                # Create STAC item
+                stac_item = create_stac_item(
+                    cog_path=out_path,
+                    datetime_obj=dt,
+                    bounds=bounds,
+                    var_attrs=data.attrs,
+                    global_attrs=ds.attrs,
+                    collection_id=collection_id
+                )
+                
+                # Write STAC JSON
+                stac_path = out_path.replace('.tif', '.json')
+                stac_item.set_self_href(stac_path)
+                stac_item.save_object(stac_path)
+                
+                print(f'Created STAC item: {stac_path}')
+                
+            except Exception as e:
+                print(f'Warning: Failed to create STAC item for {out_path}: {e}')
 
 
 if __name__ == '__main__':
@@ -112,6 +237,12 @@ if __name__ == '__main__':
         required=False,
         default='cog',
         help='Output cog filename prefix'
+    )
+
+    parser.add_argument(
+        '--concept_id',
+        required=True,
+        help='Concept ID for STAC collection naming (e.g., "C1276812838-GES_DISC")'
     )
 
     args = parser.parse_args()

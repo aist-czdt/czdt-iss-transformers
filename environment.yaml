@@ -17,4 +17,7 @@ dependencies:
   - yamale
   - odc-geo
   - numcodecs
+  - pystac>=1.8.0
+  - shapely
+  - pyproj
 
