@@ -12,4 +12,5 @@ python "${root_dir}"/src/zarr2cog.py \
   --time $3 \
   --latitude $4 \
   --longitude $5 \
-  --output $6
+  --output $6 \
+  --concept_id $7
