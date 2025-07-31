@@ -30,6 +30,7 @@ DRIVER_OPTIONS = [
     'overview_quality', 'overview_predictor', 'geotiff_version', 'sparse_ok', 'statistics', 'tiling_scheme',
     'zoom_level', 'zoom_level_strategy', 'target_srs', 'res', 'extent', 'aligned_levels', 'add_alpha'
 ]
+COLLECTION_GLOBAL_PROPERTIES = ['title', 'instrument', 'platform', 'Conventions', 'summary', 'processing_level']
 
 
 def open_zarr_dataset(zarr_url, zarr_access):
@@ -124,7 +125,7 @@ def create_stac_item(cog_path, datetime_obj, bounds, var_attrs, global_attrs, co
     # Create relative path from STAC item location to COG file
     # STAC items will be nested: collections/{collection_id}/{item_id}/{item_id}.json
     # COG files are in root output directory, so we need to go up 3 levels
-    relative_cog_path = f"../../../{cog_filename}"
+    relative_cog_path = f"../../{cog_filename}"
     
     item.add_asset(
         key="cog",
@@ -165,7 +166,9 @@ def create_stac_collection_from_items(items, global_attrs, concept_id, var_name)
     collection.update_extent_from_items()
     
     # Add global properties at collection level
-    collection.extra_fields = global_attrs.copy()
+    for attr in COLLECTION_GLOBAL_PROPERTIES:
+        if attr in global_attrs:
+            collection.extra_fields[attr] = global_attrs[attr]
     
     # Add metadata derived from collection_id
     collection.extra_fields["variable_name"] = var_name
@@ -191,14 +194,6 @@ def create_stac_catalog(concept_id, all_collections, global_attrs):
         id=f"{concept_id}-catalog",
         description=f"STAC catalog for {concept_id} dataset"
     )
-    
-    # Add global dataset properties to catalog
-    catalog.extra_fields = {}
-    global_props = ['Title', 'Institution', 'Source', 'Conventions']
-    for prop in global_props:
-        if prop in global_attrs:
-            catalog.extra_fields[f"global:{prop}"] = global_attrs[prop]
-    catalog.extra_fields["concept_id"] = concept_id
     
     for collection in all_collections:        
         # Add collection to catalog
