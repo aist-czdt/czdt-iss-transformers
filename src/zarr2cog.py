@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 from datetime import datetime
 from pathlib import Path
 from typing import Tuple
+from rio_stac import create_stac_item
 
 
 import boto3
@@ -74,13 +75,12 @@ def extract_bounds(data):
     return (minx, miny, maxx, maxy)
 
 
-def create_stac_item(cog_path, datetime_obj, bounds, var_attrs, global_attrs, collection_id):
+def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collection_id):
     """Create STAC Item from COG file metadata.
     
     Args:
         cog_path (str): Path to COG file
         datetime_obj (datetime): Timestamp for the data
-        bounds (tuple): Spatial bounds (minx, miny, maxx, maxy)
         var_attrs (dict): Variable attributes from Zarr
         global_attrs (dict): Global attributes from Zarr dataset
         collection_id (str): Collection ID to reference
@@ -88,23 +88,20 @@ def create_stac_item(cog_path, datetime_obj, bounds, var_attrs, global_attrs, co
     Returns:
         pystac.Item: STAC item object
     """
-    # Create bounding box and geometry
-    minx, miny, maxx, maxy = bounds
-    bbox = [minx, miny, maxx, maxy]
-    
-    # Create polygon geometry
-    geometry = mapping(Polygon.from_bounds(minx, miny, maxx, maxy))
     
     # Generate item ID from filename
     item_id = Path(cog_path).stem
     
     # Create STAC item
-    item = pystac.Item(
+    item = create_stac_item(
+        cog_path,
         id=item_id,
-        geometry=geometry,
-        bbox=bbox,
-        datetime=datetime_obj,
-        properties={}
+        input_datetime=datetime_obj,
+        properties={},
+        asset_href="",
+        with_proj=True,
+        with_raster=True,
+        with_eo=True
     )
     
     # Add variable-specific properties
@@ -253,17 +250,13 @@ def main(args):
             
             # Create STAC item for this COG file
             try:
-                # Extract spatial bounds
-                bounds = extract_bounds(data)
-                
                 # Create collection ID
                 collection_id = f"{args.concept_id}-{var_name}"
                 
                 # Create STAC item
-                stac_item = create_stac_item(
+                stac_item = create_stac_item_loc(
                     cog_path=tif_file,
                     datetime_obj=dt,
-                    bounds=bounds,
                     var_attrs=data.attrs,
                     global_attrs=ds.attrs,
                     collection_id=collection_id
