@@ -141,8 +141,9 @@ def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collec
     # STAC items will be nested: collections/{collection_id}/{item_id}/{item_id}.json
     # COG files are in root output directory, so we need to go up 3 levels
     relative_cog_path = f"../../{os.path.basename(cog_path)}"
+    asset_key = "asset"
     if asset_key in item.assets:
-        asset = item.assets["asset"]
+        asset = item.assets[asset_key]
         # Change the href of the COG asset
         asset.href = relative_cog_path
     
