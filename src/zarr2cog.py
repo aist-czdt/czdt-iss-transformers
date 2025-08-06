@@ -3,16 +3,13 @@ import os
 import shutil
 import sys
 from urllib.parse import urlparse
-from datetime import datetime
 from pathlib import Path
 from typing import Tuple
 from rio_stac import create_stac_item
 
-
 import boto3
 import xarray as xr
 import pystac
-from shapely.geometry import Polygon, mapping
 from xarray import DataArray
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -75,7 +72,31 @@ def extract_bounds(data):
     return (minx, miny, maxx, maxy)
 
 
-def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collection_id):
+def s3_to_https(s3_url):
+    """
+    Convert an S3 URL to an HTTPS URL.
+    
+    Example:
+        s3://my-bucket/path/to/file.txt ->
+        https://my-bucket.s3.amazonaws.com/path/to/file.txt
+    """
+    if not s3_url.startswith("s3://"):
+        raise ValueError("Invalid S3 URL. It must start with 's3://'")
+
+    # Remove the 's3://' prefix
+    without_prefix = s3_url[5:]
+
+    # Split into bucket and key
+    parts = without_prefix.split('/', 1)
+    if len(parts) != 2:
+        raise ValueError("Invalid S3 URL format. Must be 's3://bucket/key'")
+
+    bucket, key = parts
+    https_url = f"https://{bucket}.s3.amazonaws.com/{key}"
+    return https_url
+
+
+def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collection_id, zarr_url):
     """Create STAC Item from COG file metadata.
     
     Args:
@@ -84,6 +105,7 @@ def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collec
         var_attrs (dict): Variable attributes from Zarr
         global_attrs (dict): Global attributes from Zarr dataset
         collection_id (str): Collection ID to reference
+        zarr_url (str): Path to the ZARR folder
         
     Returns:
         pystac.Item: STAC item object
@@ -91,10 +113,19 @@ def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collec
     
     # Generate item ID from filename
     item_id = Path(cog_path).stem
+
+    # Add COG asset with relative path
+    # Extract just the filename from the full path for relative referencing
+    cog_filename = os.path.basename(cog_path)
+    
+    # Create relative path from STAC item location to COG file
+    # STAC items will be nested: collections/{collection_id}/{item_id}/{item_id}.json
+    # COG files are in root output directory, so we need to go up 3 levels
+    relative_cog_path = f"../../{cog_filename}"
     
     # Create STAC item
     item = create_stac_item(
-        cog_path,
+        relative_cog_path,
         id=item_id,
         input_datetime=datetime_obj,
         properties={},
@@ -115,20 +146,10 @@ def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collec
         if prop in global_attrs:
             item.properties[f"global:{prop}"] = global_attrs[prop]
     
-    # Add COG asset with relative path
-    # Extract just the filename from the full path for relative referencing
-    cog_filename = os.path.basename(cog_path)
-    
-    # Create relative path from STAC item location to COG file
-    # STAC items will be nested: collections/{collection_id}/{item_id}/{item_id}.json
-    # COG files are in root output directory, so we need to go up 3 levels
-    relative_cog_path = f"../../{cog_filename}"
-    
     item.add_asset(
-        key="cog",
+        key="zarr",
         asset=pystac.Asset(
-            href=relative_cog_path,
-            media_type="image/tiff; application=geotiff; profile=cloud-optimized",
+            href=s3_to_https(zarr_url),
             roles=["data"]
         )
     )
@@ -145,6 +166,8 @@ def create_stac_collection_from_items(items, global_attrs, concept_id, var_name)
     Args:
         items (list): List of STAC items for this collection
         global_attrs (dict): Global attributes from Zarr dataset
+        concept_id (str): The DAAC concept id
+        var_name: the collection variable name
         
     Returns:
         pystac.Collection: STAC collection with proper extents
@@ -259,7 +282,8 @@ def main(args):
                     datetime_obj=dt,
                     var_attrs=data.attrs,
                     global_attrs=ds.attrs,
-                    collection_id=collection_id
+                    collection_id=collection_id,
+                    zarr_url=zarr_url
                 )
                 
                 # Add to catalog items list
