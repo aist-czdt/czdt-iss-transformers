@@ -113,19 +113,10 @@ def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collec
     
     # Generate item ID from filename
     item_id = Path(cog_path).stem
-
-    # Add COG asset with relative path
-    # Extract just the filename from the full path for relative referencing
-    cog_filename = os.path.basename(cog_path)
-    
-    # Create relative path from STAC item location to COG file
-    # STAC items will be nested: collections/{collection_id}/{item_id}/{item_id}.json
-    # COG files are in root output directory, so we need to go up 3 levels
-    relative_cog_path = f"../../{cog_filename}"
     
     # Create STAC item
     item = create_stac_item(
-        relative_cog_path,
+        cog_path,
         id=item_id,
         input_datetime=datetime_obj,
         properties={},
@@ -145,7 +136,17 @@ def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collec
     for prop in global_props:
         if prop in global_attrs:
             item.properties[f"global:{prop}"] = global_attrs[prop]
+
+    # Create relative path from STAC item location to COG file
+    # STAC items will be nested: collections/{collection_id}/{item_id}/{item_id}.json
+    # COG files are in root output directory, so we need to go up 3 levels
+    relative_cog_path = f"../../{os.path.basename(cog_path)}"
+    if asset_key in item.assets:
+        asset = item.assets["asset"]
+        # Change the href of the COG asset
+        asset.href = relative_cog_path
     
+    # Add ZARR asset url
     item.add_asset(
         key="zarr",
         asset=pystac.Asset(
