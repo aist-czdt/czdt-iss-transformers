@@ -61,7 +61,7 @@ def get_config(path: str) -> dict:
 
 
 def stage_s3(prefix_url: str, client) -> str:
-    staging_dir = tempfile.mkdtemp()
+    staging_dir = tempfile.mkdtemp(dir=os.getcwd())
 
     print(f'Created data staging directory: {staging_dir}')
 
