@@ -21,4 +21,6 @@ dependencies:
   - rio-stac
   - shapely
   - pyproj
+  - xesmf
+  - esmpy
 
