@@ -135,7 +135,7 @@ if __name__ == '__main__':
         help='Reprojected grid resolution (default: 0.005). Real number > 0'
     )
 
-    def _valid_vars(variables):
+    def _validate_vars(variables):
         valid_vars = []
 
         for var_entry in variables:
@@ -152,13 +152,13 @@ if __name__ == '__main__':
 
     parser.add_argument(
         '--variables',
-        type=_valid_vars,
         default=['oxygen', 'salt'],
         nargs='+',
         help='List of variables to process. Currently only support 4d vars (time x s_rho x eta_rho x xi_rho)'
     )
 
     args = parser.parse_args()
+    args.variables = _validate_vars(args.variables)
 
     print(args)
 
