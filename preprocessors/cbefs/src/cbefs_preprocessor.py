@@ -138,11 +138,12 @@ if __name__ == '__main__':
     def _valid_vars(variables):
         valid_vars = []
 
-        for var in variables:
-            if var in VALID_VARIABLES:
-                valid_vars.append(var)
-            else:
-                print(f'Warning: provided variable {var} is not currently supported')
+        for var_entry in variables:
+            for var in var_entry.split(','):
+                if var in VALID_VARIABLES:
+                    valid_vars.append(var)
+                else:
+                    print(f'Warning: provided variable {var} is not currently supported')
 
         if len(valid_vars) == 0:
             raise ValueError('No valid variables were provided')
