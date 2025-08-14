@@ -20,6 +20,4 @@ dependencies:
   - pystac>=1.8.0
   - shapely
   - pyproj
-  - xesmf
-  - esmpy
 
