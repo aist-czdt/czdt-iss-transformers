@@ -102,6 +102,7 @@ def main(args):
         print(regridder)
 
         ds_regridded = regridder(ds_src_2d, keep_attrs=True, skipna=True)
+        ds_regridded.attrs['s_rho'] = str(s)
         print("\n--- Regridded Dataset on WGS84 Grid ---")
         print(ds_regridded)
 
