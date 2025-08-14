@@ -8,7 +8,7 @@ root_dir=$(dirname "${basedir}")
 
 mkdir -p output
 source activate cbefs_preprocessor
-python "${root_dir}"/preprocessors/cbefs/src/cbefs_preprocessor.py \
+python -u "${root_dir}"/preprocessors/cbefs/src/cbefs_preprocessor.py \
   --url $1 \
   --resolution $2 \
   --variables "${@:3}"

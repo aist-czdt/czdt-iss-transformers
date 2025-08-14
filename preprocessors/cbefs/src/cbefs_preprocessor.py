@@ -81,7 +81,7 @@ def main(args):
     for s in range(s_rho_length):
         print(f'Reprojecting s_rho={s}')
 
-        variables_2d = {v: v[:, s, :, :] for v in variables_np}
+        variables_2d = {v: variables_np[v][:, s, :, :] for v in variables_np}
 
         ds_src_2d = xr.Dataset(
             data_vars={v: (("time", "eta_rho", "xi_rho"), variables_2d[v], dataset[v].attributes)
