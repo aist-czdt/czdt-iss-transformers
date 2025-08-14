@@ -1,0 +1,12 @@
+name: cbefs_preprocessor
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - psutil
+  - pydap
+  - numpy
+  - xarray
+  - cftime
+  - xesmf>=0.7
+  - dask
