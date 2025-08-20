@@ -116,6 +116,13 @@ def main(args):
         encoding = {vname: {'compressors': [compressor]} for vname in ds.data_vars}
         to_zarr_kwargs = {}
     else:
+        # TODO: There MUST be a much better way to detect we're converting from Zarr3 to Zarr2
+        #  which requires clearing all encoding settings (leaving _FillValue since I think it may be important)
+        if 'serializer' in ds[list(ds.data_vars)[0]].encoding:
+
+            for var in ds.variables:
+                ds[var].encoding = {enc: ds[var].encoding for enc in ds[var].encoding if enc == '_FillValue'}
+
         compressor = BloscZ2(cname="blosclz", clevel=9)
         encoding = {vname: {'compressor': compressor} for vname in ds.data_vars}
         to_zarr_kwargs = {
