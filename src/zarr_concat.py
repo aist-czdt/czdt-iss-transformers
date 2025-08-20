@@ -13,6 +13,7 @@ import pandas as pd
 import xarray as xr
 
 from zarr.codecs import BloscCodec as Blosc
+from numcodecs.blosc import Blosc as BloscZ2
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
@@ -110,19 +111,30 @@ def main(args):
     for var in ds.data_vars:
         ds[var] = ds[var].chunk(chunk_config)
 
-    compressor = Blosc(cname="blosclz", clevel=9)
-    encoding = {vname: {'compressor': compressor} for vname in ds.data_vars}
+    if args.zarr_version == 3:
+        compressor = Blosc(cname="blosclz", clevel=9)
+        encoding = {vname: {'compressors': [compressor]} for vname in ds.data_vars}
+        to_zarr_kwargs = {}
+    else:
+        compressor = BloscZ2(cname="blosclz", clevel=9)
+        encoding = {vname: {'compressor': compressor} for vname in ds.data_vars}
+        to_zarr_kwargs = {
+            'consolidated': True
+        }
 
     print(f'Writing to zarr (v{args.zarr_version}) file: {os.path.join("output", output)}')
 
-    ds.to_zarr(
-        os.path.join('output', output),
-        mode='w-',
-        encoding=encoding,
-        consolidated=True,
-        write_empty_chunks=False,
-        zarr_format=args.zarr_version,
-    )
+    import warnings
+
+    with warnings.catch_warnings(action='ignore'):
+        ds.to_zarr(
+            os.path.join('output', output),
+            mode='w-',
+            encoding=encoding,
+            write_empty_chunks=False,
+            zarr_format=args.zarr_version,
+            **to_zarr_kwargs
+        )
 
 
 if __name__ == '__main__':
