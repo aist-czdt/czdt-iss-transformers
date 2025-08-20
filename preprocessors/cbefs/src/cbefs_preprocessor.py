@@ -111,7 +111,7 @@ def main(args):
         # Loop through timesteps and save each as a new file
         for i, t in enumerate(ds_regridded.time.values):
             print(f'Outputting gridded file to {output_filename}_{i}')
-            ds_regridded.isel(time=i).to_netcdf(f"{output_filename}_{i}.nc")
+            ds_regridded.isel(time=[i]).to_netcdf(f"{output_filename}_{i}.nc")
 
 
 if __name__ == '__main__':
