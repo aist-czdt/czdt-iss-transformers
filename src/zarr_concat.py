@@ -105,8 +105,6 @@ def main(args):
 
     chunk_config = {config['dimensions'][d]: config['chunks'][d] for d in config['chunks']}
 
-    # exit()
-
     print(f'Setting chunk config: {chunk_config}')
 
     for var in ds.data_vars:
@@ -115,14 +113,15 @@ def main(args):
     compressor = Blosc(cname="blosclz", clevel=9)
     encoding = {vname: {'compressor': compressor} for vname in ds.data_vars}
 
-    print(f'Writing to zarr file: {os.path.join("output", output)}')
+    print(f'Writing to zarr (v{args.zarr_version}) file: {os.path.join("output", output)}')
 
     ds.to_zarr(
         os.path.join('output', output),
         mode='w-',
         encoding=encoding,
         consolidated=True,
-        write_empty_chunks=False
+        write_empty_chunks=False,
+        zarr_format=args.zarr_version,
     )
 
 
@@ -163,6 +162,14 @@ if __name__ == '__main__':
         default=None,
         help='If set, this is the maximum difference in max-min time of the output dataset. Defined as an ISO 8601 '
              'Duration (or anything else parseable by pandas.Timedelta)'
+    )
+
+    parser.add_argument(
+        '-v', '--zarr-version',
+        type=int,
+        choices=[2, 3],
+        default=3,
+        help='Version of zarr standard to output'
     )
 
     parser.add_argument(

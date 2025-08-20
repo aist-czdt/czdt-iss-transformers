@@ -10,5 +10,6 @@ python "${root_dir}"/src/zarr_concat.py \
   $([ -n "$1" ] && echo $1)\
   --zarr-manifest $2 \
   --zarr-access $3 \
-  $([[ $4 != "none" ]] && echo --duration $4)\
-  --output $5
+  $([[ $4 != "none" ]] && echo --duration $4) \
+  --zarr-version $5 \
+  --output $6
