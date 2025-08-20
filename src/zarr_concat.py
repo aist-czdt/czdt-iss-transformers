@@ -121,7 +121,7 @@ def main(args):
         if 'serializer' in ds[list(ds.data_vars)[0]].encoding:
 
             for var in ds.variables:
-                ds[var].encoding = {enc: ds[var].encoding for enc in ds[var].encoding if enc == '_FillValue'}
+                ds[var].encoding = {enc: ds[var].encoding[enc] for enc in ds[var].encoding if enc == '_FillValue'}
 
         compressor = BloscZ2(cname="blosclz", clevel=9)
         encoding = {vname: {'compressor': compressor} for vname in ds.data_vars}
