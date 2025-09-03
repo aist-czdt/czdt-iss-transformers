@@ -106,10 +106,12 @@ def main(args):
         print("\n--- Regridded Dataset on WGS84 Grid ---")
         print(ds_regridded)
 
-        output_filename = join('output', f'{splitext(basename(url))[0]}_gridded_{resolution}_s{s}.nc')
-        print(f'Outputting gridded file to {output_filename}')
-
-        ds_regridded.to_netcdf(output_filename)
+        output_filename = join('output', f'{splitext(basename(url))[0]}_gridded_{resolution}_s{s}')
+        
+        # Loop through timesteps and save each as a new file
+        for i, t in enumerate(ds_regridded.time.values):
+            print(f'Outputting gridded file to {output_filename}_{i}')
+            ds_regridded.isel(time=[i]).to_netcdf(f"{output_filename}_{i}.nc")
 
 
 if __name__ == '__main__':
