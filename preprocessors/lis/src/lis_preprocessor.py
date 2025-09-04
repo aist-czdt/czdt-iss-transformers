@@ -19,8 +19,11 @@ def main():
             north_south=ds.lat, east_west=ds.lon
         )
 
+        time = ds.time
+
         del ds['lat']
         del ds['lon']
+        del ds['time']
 
         logger.info(f'Assigned coordinates & removed lat/lon as data vars:\n{ds}')
 
@@ -37,6 +40,11 @@ def main():
         del ds[f'SoilTemp_tavg']
 
         logger.info('Split SoilTemp_tavg variable along SoilTemp_profiles dimension')
+
+        logger.info('Re-assigning time coordinate to all vars')
+
+        ds = ds.expand_dims(time=1).assign_coords(time=time)
+
         logger.info(f'Final dataset: \n{ds}')
 
         logger.info(f"Writing netCDF file {os.path.join('output', lis_file)}")
