@@ -1,0 +1,9 @@
+name: lis_preprocessor
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - numpy
+  - xarray
+  - cftime
+  - netcdf4
