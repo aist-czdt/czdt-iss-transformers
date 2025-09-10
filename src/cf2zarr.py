@@ -14,76 +14,95 @@ from zarr.codecs import BloscCodec as Blosc
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
-from src.util import stage_s3, open_zarr, get_config
+from src.util import stage_s3, get_config
 
 staging_dirs = []
 
 
-def main(args):
-    pattern = args.pattern
-    # variables = args.variables
-    output = args.output
-
-    variables = []
-
-    for v in args.variables:
-        variables.extend(v.split(','))
-
-    config = get_config(args.config)
-    dim = config['dimensions']['time']
-
-    session = boto3.Session(profile_name=os.getenv('AWS_PROFILE', None))
+def setup_aws_session(profile_name=None):
+    """Setup AWS session and S3 client"""
+    session = boto3.Session(profile_name=profile_name or os.getenv('AWS_PROFILE', None))
     client = session.client('s3')
+    return session, client
 
-    if args.zarr not in {'', 'none'}:
-        credentials = session.get_credentials().get_frozen_credentials()
-        ds, stage_dir = open_zarr(args.zarr, args.zarr_access, client, credentials)
 
-        if stage_dir is not None:
-            staging_dirs.append(stage_dir)
-
-        print('Opened existing zarr dataset')
-        print(ds)
-    else:
-        ds = None
-        print('No existing zarr dataset, starting a new one')
-
-    input_stage_dir = stage_s3(args.input_s3, client)
-
-    new_ds = xr.open_mfdataset(os.path.join(input_stage_dir, pattern)).sortby(dim)
-    print('Opened new dataset from input NetCDF files')
-    print(new_ds)
-
+def convert_cf_to_zarr(
+    config_path,
+    input_path,
+    output_path,
+    pattern='*.nc',
+    variables=None,
+    duration=None,
+    aws_profile=None
+):
+    """Convert NetCDF files to Zarr format.
+    
+    Args:
+        config_path: Path to configuration YAML file
+        input_path: Path to input files (local directory or S3 URL prefix)
+        output_path: Output zarr filename/path
+        pattern: Glob pattern to match files (default: '*.nc')
+        variables: List of variables to convert (default: None for all)
+        duration: Maximum time duration as pandas.Timedelta (default: None)
+        aws_profile: AWS profile name (default: None)
+    
+    Returns:
+        xarray.Dataset: The processed dataset
+    """
     if variables is None:
         variables = []
-
-    variable_name = list(new_ds.data_vars.keys())[0]  # Automatically pick the first variable
-    if len(variables) == 0:
-        if ds is None:
-            variables = [variable_name]
+    elif isinstance(variables, str):
+        variables = variables.split(',')
+    
+    # Flatten nested comma-separated variables
+    flat_variables = []
+    for v in variables:
+        if isinstance(v, str):
+            flat_variables.extend(v.split(','))
         else:
-            variables = list(ds.data_vars)
+            flat_variables.append(v)
+    variables = flat_variables
+
+    config = get_config(config_path)
+    dim = config['dimensions']['time']
+
+    # Determine if input is local or S3
+    if input_path.startswith('s3://'):
+        # S3 input - setup AWS session and stage data
+        session, client = setup_aws_session(aws_profile)
+        input_stage_dir = stage_s3(input_path, client)
+        staging_dirs.append(input_stage_dir)
+        data_path = os.path.join(input_stage_dir, pattern)
+    else:
+        # Local input
+        if os.path.isfile(input_path):
+            # Single file
+            data_path = input_path
+        else:
+            # Directory with pattern
+            data_path = os.path.join(input_path, pattern)
+    
+    # Load new data
+    ds = xr.open_mfdataset(data_path).sortby(dim)
+    print('Opened dataset from NetCDF files')
+    print(ds)
+
+    # Handle variable selection
+    if len(variables) == 0:
+        variable_name = list(ds.data_vars.keys())[0]
+        variables = [variable_name]
     elif variables[0] == '*':
         print('All variables selected - skipping subselection')
         variables = []
 
     if variables:
         print(f'Subselecting vars: {variables}')
-        new_ds = new_ds[variables]
-
-    if ds is not None:
-        ds = xr.concat((ds, new_ds), dim=dim).sortby(dim)
-        print('Concatenated datasets')
-        print(ds)
-    else:
-        ds = new_ds
+        ds = ds[variables]
 
     time_coord = config['coordinates']['time']
 
     # Dedup time steps
-
     times = ds[time_coord].to_numpy()
-
     if any(np.diff(times).astype(int) == 0):
         print(f'Warning: duplicate time steps detected')
 
@@ -93,55 +112,68 @@ def main(args):
         for i, v in enumerate(times.astype(int)):
             if v == prev:
                 drop.append(i - 1)
-
             prev = v
 
         print(f'Dropping {len(drop):,} time steps at indices: {drop}')
-
         ds = ds.drop_duplicates(dim=dim, keep='first')
 
-    if args.duration is not None:
+    # Handle duration constraint
+    if duration is not None:
         ds_duration = pd.Timedelta((ds[time_coord][-1] - ds[time_coord][0]).data.item())
-
         print(f'new dataset duration: {ds_duration}')
 
-        if ds_duration > args.duration:
+        if ds_duration > duration:
             print('Dataset duration exceeds max duration provided')
-
             idx = 0
-
-            while pd.Timedelta((ds[time_coord][-1] - ds[time_coord][idx]).data.item()) > args.duration:
+            while pd.Timedelta((ds[time_coord][-1] - ds[time_coord][idx]).data.item()) > duration:
                 idx += 1
-
             ds = ds.isel(time=slice(idx, None))
-
             print(f'Dropped {idx:,} time steps. New dataset duration: '
                   f'{pd.Timedelta((ds[time_coord][-1] - ds[time_coord][0]).data.item())}')
 
+    # Apply chunking
     chunk_config = {config['dimensions'][d]: config['chunks'][d] for d in config['chunks']}
-
-    # exit()
-
     print(f'Setting chunk config: {chunk_config}')
 
     for var in ds.data_vars:
         ds[var] = ds[var].chunk(chunk_config)
 
+    # Setup compression and write to zarr
     compressor = Blosc(cname="blosclz", clevel=9)
     encoding = {vname: {'compressor': compressor} for vname in ds.data_vars}
 
-    print(f'Writing to zarr file: {os.path.join("output", output)}')
+    # Ensure output directory exists
+    output_dir = os.path.dirname(output_path) if os.path.dirname(output_path) else '.'
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+    
+    print(f'Writing to zarr file: {output_path}')
 
     ds.to_zarr(
-        os.path.join('output', output),
+        output_path,
         mode='w-',
         encoding=encoding,
         consolidated=True,
         write_empty_chunks=False
     )
+    
+    return ds
 
 
-if __name__ == '__main__':
+def main(args):
+    """Main function for CLI usage"""
+    return convert_cf_to_zarr(
+        config_path=args.config,
+        input_path=args.input,
+        output_path=os.path.join('output', args.output),
+        pattern=args.pattern,
+        variables=args.variables,
+        duration=args.duration
+    )
+
+
+def cli_main():
+    """Entry point for CLI script"""
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -152,25 +184,11 @@ if __name__ == '__main__':
     )
 
     parser.add_argument(
-        '-i', '--input-s3',
+        '-i', '--input',
         required=True,
-        help='S3 URL prefix of input files to stage'
+        help='Path to input NetCDF files (local directory/file or S3 URL prefix)'
     )
 
-    parser.add_argument(
-        '-z', '--zarr',
-        required=False,
-        default='',
-        help='S3 URL of existing zarr data to append to'
-    )
-
-    parser.add_argument(
-        '--zarr-access',
-        required=False,
-        default='stage',
-        choices=['stage', 'mount'],
-        help='stage: Download zarr data from S3 to local filesystem; mount: mount S3 to local filesystem'
-    )
 
     parser.add_argument(
         '-p', '--pattern',
@@ -212,3 +230,7 @@ if __name__ == '__main__':
                 shutil.rmtree(sd)
             except:
                 print(f'Failed to remove staging dir: {sd}')
+
+
+if __name__ == '__main__':
+    cli_main()
