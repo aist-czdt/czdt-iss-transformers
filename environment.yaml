@@ -18,6 +18,7 @@ dependencies:
   - odc-geo
   - numcodecs
   - pystac>=1.8.0
+  - rio-stac
   - shapely
   - pyproj
 
