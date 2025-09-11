@@ -1,5 +1,6 @@
 
 import argparse
+import logging
 import os
 import shutil
 import sys
@@ -15,6 +16,11 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 from .util import stage_s3, get_config
+
+# Configure logging: INFO for basic config, DEBUG for this module  
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 staging_dirs = []
 
@@ -84,19 +90,19 @@ def convert_cf_to_zarr(
     
     # Load new data
     ds = xr.open_mfdataset(data_path).sortby(dim)
-    print('Opened dataset from NetCDF files')
-    print(ds)
+    logger.info('Opened dataset from NetCDF files')
+    logger.debug(f'Dataset info: {ds}')
 
     # Handle variable selection
     if len(variables) == 0:
         variable_name = list(ds.data_vars.keys())[0]
         variables = [variable_name]
     elif variables[0] == '*':
-        print('All variables selected - skipping subselection')
+        logger.info('All variables selected - skipping subselection')
         variables = []
 
     if variables:
-        print(f'Subselecting vars: {variables}')
+        logger.info(f'Subselecting vars: {variables}')
         ds = ds[variables]
 
     time_coord = config['coordinates']['time']
@@ -104,7 +110,7 @@ def convert_cf_to_zarr(
     # Dedup time steps
     times = ds[time_coord].to_numpy()
     if any(np.diff(times).astype(int) == 0):
-        print(f'Warning: duplicate time steps detected')
+        logger.warning('Duplicate time steps detected')
 
         prev = None
         drop = []
@@ -114,26 +120,26 @@ def convert_cf_to_zarr(
                 drop.append(i - 1)
             prev = v
 
-        print(f'Dropping {len(drop):,} time steps at indices: {drop}')
+        logger.info(f'Dropping {len(drop):,} time steps at indices: {drop}')
         ds = ds.drop_duplicates(dim=dim, keep='first')
 
     # Handle duration constraint
     if duration is not None:
         ds_duration = pd.Timedelta((ds[time_coord][-1] - ds[time_coord][0]).data.item())
-        print(f'new dataset duration: {ds_duration}')
+        logger.info(f'New dataset duration: {ds_duration}')
 
         if ds_duration > duration:
-            print('Dataset duration exceeds max duration provided')
+            logger.warning('Dataset duration exceeds max duration provided')
             idx = 0
             while pd.Timedelta((ds[time_coord][-1] - ds[time_coord][idx]).data.item()) > duration:
                 idx += 1
             ds = ds.isel(time=slice(idx, None))
-            print(f'Dropped {idx:,} time steps. New dataset duration: '
+            logger.info(f'Dropped {idx:,} time steps. New dataset duration: '
                   f'{pd.Timedelta((ds[time_coord][-1] - ds[time_coord][0]).data.item())}')
 
     # Apply chunking
     chunk_config = {config['dimensions'][d]: config['chunks'][d] for d in config['chunks']}
-    print(f'Setting chunk config: {chunk_config}')
+    logger.debug(f'Setting chunk config: {chunk_config}')
 
     for var in ds.data_vars:
         ds[var] = ds[var].chunk(chunk_config)
@@ -147,7 +153,7 @@ def convert_cf_to_zarr(
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
     
-    print(f'Writing to zarr file: {output_path}')
+    logger.info(f'Writing to zarr file: {output_path}')
 
     ds.to_zarr(
         output_path,
@@ -219,17 +225,17 @@ def cli_main():
 
     args = parser.parse_args()
 
-    print(args)
+    logger.debug(f'CLI arguments: {args}')
 
     try:
         main(args)
     finally:
         for sd in staging_dirs:
             try:
-                print(f'Cleaning up staging dir: {sd}')
+                logger.debug(f'Cleaning up staging dir: {sd}')
                 shutil.rmtree(sd)
-            except:
-                print(f'Failed to remove staging dir: {sd}')
+            except Exception as e:
+                logger.error(f'Failed to remove staging dir: {sd}: {e}')
 
 
 if __name__ == '__main__':

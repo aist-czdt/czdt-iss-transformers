@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import shutil
 import sys
@@ -16,6 +17,11 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 from .util import open_zarr
+
+# Configure logging: INFO for basic config, DEBUG for this module  
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 staging_dirs = []
 
@@ -35,9 +41,9 @@ def open_zarr_dataset(zarr_url, zarr_access):
     parsed_url = urlparse(zarr_url)
 
     if parsed_url.scheme in ('', 'file'):
-        print(f'Opening local zarr dataset at {zarr_url}')
+        logger.info(f'Opening local zarr dataset at {zarr_url}')
         ds = xr.open_zarr(zarr_url, consolidated=True)
-        print(ds)
+        logger.debug(f'Dataset info: {ds}')
         return ds
 
     session = boto3.Session(profile_name=os.getenv('AWS_PROFILE', None))
@@ -49,8 +55,8 @@ def open_zarr_dataset(zarr_url, zarr_access):
     if stage_dir is not None:
         staging_dirs.append(stage_dir)
 
-    print(f'Opened zarr dataset at {zarr_url}')
-    print(ds)
+    logger.info(f'Opened zarr dataset at {zarr_url}')
+    logger.debug(f'Dataset info: {ds}')
     return ds
 
 
@@ -153,7 +159,7 @@ def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collec
         zarr_href = s3_to_https(zarr_url)
     else:
         # Local path or other scheme - use as-is
-        zarr_href = zarr_url
+        zarr_href = f"../../{zarr_url}"
     
     item.add_asset(
         key="zarr",
@@ -244,16 +250,16 @@ def convert_timeslice_to_cog(input_data: DataArray, time, var_name, lat_c, lon_c
         latitude = data['y'].to_numpy()
 
         if latitude[1] - latitude[0] >= 0:
-            print(f'Flipping latitude for {var_name}')
+            logger.debug(f'Flipping latitude for {var_name}')
             data = data.isel({'y': slice(None, None, -1)})
     except Exception as e:
-        print(f'Could not check latitude ordering for {var_name} due to {e}')
+        logger.warning(f'Could not check latitude ordering for {var_name} due to {e}')
 
     filename = f'{output_filename_prefix}_{dt.strftime("%Y-%m-%dT%H%M%SZ")}_{var_name}.tif'
 
     out_path = os.path.join(output_dir, filename)
 
-    print(f'Writing timestep {dt} to {out_path}')
+    logger.debug(f'Writing timestep {dt} to {out_path}')
 
     data.rio.to_raster(out_path, driver='COG', sharing=False, **DRIVER_KWARGS)
     return data, out_path
@@ -266,13 +272,13 @@ def main(args):
 
     ds = open_zarr_dataset(zarr_url, args.zarr_access)
 
-    print(f'{len(ds.data_vars)} variables, {len(ds[time_c])} time steps')
+    logger.info(f'{len(ds.data_vars)} variables, {len(ds[time_c])} time steps')
     
     # Track all created collections for catalog creation
     all_collections = []
 
     for var_name in ds.data_vars:
-        print(f'Iterating over variable {var_name}')
+        logger.debug(f'Iterating over variable {var_name}')
         var_items = []
         da = ds[var_name]
 
@@ -299,13 +305,13 @@ def main(args):
                 var_items.append(stac_item)
                 
             except Exception as e:
-                print(f'Warning: Failed to create STAC item for {tif_file}: {e}')
+                logger.warning(f'Failed to create STAC item for {tif_file}: {e}')
         if var_items:
             all_collections.append(create_stac_collection_from_items(var_items, ds.attrs, args.concept_id, var_name))
 
     # Create and save complete STAC catalog
     if all_collections:
-        print(f"\nCreating STAC catalog from {len(all_collections)} collections...")
+        logger.info(f"Creating STAC catalog from {len(all_collections)} collections...")
         try:
             catalog = create_stac_catalog(
                 args.concept_id, 
@@ -320,16 +326,16 @@ def main(args):
             )
             
             collections = list(catalog.get_collections())
-            print(f"✓ Created STAC catalog with {len(collections)} collections")
+            logger.info(f"Created STAC catalog with {len(collections)} collections")
             for collection in collections:
                 item_count = len(list(collection.get_items()))
-                print(f"  - {collection.id}: {item_count} items")
-            print(f"✓ Catalog saved to: output/catalog.json")
+                logger.info(f"  - {collection.id}: {item_count} items")
+            logger.info(f"Catalog saved to: output/catalog.json")
             
         except Exception as e:
-            print(f'Warning: Failed to create STAC catalog: {e}')
+            logger.warning(f'Failed to create STAC catalog: {e}')
     else:
-        print("No STAC items created, skipping catalog generation")
+        logger.warning("No STAC items created, skipping catalog generation")
 
 
 def cli_main():
@@ -382,17 +388,17 @@ def cli_main():
 
     args = parser.parse_args()
 
-    print(args)
+    logger.debug(f'CLI arguments: {args}')
 
     try:
         main(args)
     finally:
         for sd in staging_dirs:
             try:
-                print(f'Cleaning up staging dir: {sd}')
+                logger.debug(f'Cleaning up staging dir: {sd}')
                 shutil.rmtree(sd)
-            except:
-                print(f'Failed to remove staging dir: {sd}')
+            except Exception as e:
+                logger.error(f'Failed to remove staging dir: {sd}: {e}')
 
 
 if __name__ == '__main__':
