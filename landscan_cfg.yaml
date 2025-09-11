@@ -1,0 +1,13 @@
+resolution_deg: 0
+chunks:
+  time: 7
+  latitude: 5000
+  longitude: 5000
+band_map:
+  1: "population"
+filename_pattern: '(?P<id>landscan-global-(?P<year>\d{4}))[.](?P<ext>tif|tiff)$'
+timestamp:
+  group: year
+  dt_string: '%Y'
+  round_down_to: day
+nodata: -2147483647
