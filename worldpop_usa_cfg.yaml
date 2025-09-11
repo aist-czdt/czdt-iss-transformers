@@ -1,0 +1,13 @@
+resolution_deg: 0
+chunks:
+  time: 7
+  latitude: 10000
+  longitude: 10000
+band_map:
+  1: "population"
+filename_pattern: '(?P<id>usa_ppp_(?P<year>\d{4})_constrained)[.](?P<ext>tif|tiff)$'
+timestamp:
+  group: year
+  dt_string: '%Y'
+  round_down_to: day
+nodata: -99999
