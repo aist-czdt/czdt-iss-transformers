@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "czdt-iss-transformers"
+version = "0.1.0"
+description = "Data transformation utilities for NetCDF, Zarr, and GeoTIFF formats"
+authors = [
+    {name = "AIST CZDT"}
+]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+dependencies = [
+    "xarray",
+    "netCDF4",
+    "dask",
+    "zarr",
+    "cftime",
+    "pandas",
+    "boto3",
+    "s3fs==2025.3.2",
+    "fsspec==2025.3.2",
+    "aiobotocore==2.21.1",
+    "rioxarray",
+    "yamale",
+    "odc-geo",
+    "numcodecs",
+    "pystac>=1.8.0",
+    "rio-stac",
+    "shapely",
+    "pyproj",
+    "numpy"
+]
+
+[project.urls]
+Homepage = "https://github.com/aist-czdt/czdt-iss-transformers"
+Repository = "https://github.com/aist-czdt/czdt-iss-transformers"
+
+[project.scripts]
+cf2zarr = "czdt_iss_transformers.cf2zarr:cli_main"
+cog2zarr = "czdt_iss_transformers.cog2zarr:cli_main"
+zarr2cog = "czdt_iss_transformers.zarr2cog:cli_main"
+zarr-concat = "czdt_iss_transformers.zarr_concat:cli_main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

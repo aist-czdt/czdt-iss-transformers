@@ -15,7 +15,7 @@ from xarray import DataArray
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
-from src.util import open_zarr
+from .util import open_zarr
 
 staging_dirs = []
 
@@ -148,10 +148,17 @@ def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collec
         asset.href = relative_cog_path
     
     # Add ZARR asset url
+    parsed_zarr_url = urlparse(zarr_url)
+    if parsed_zarr_url.scheme == 's3':
+        zarr_href = s3_to_https(zarr_url)
+    else:
+        # Local path or other scheme - use as-is
+        zarr_href = zarr_url
+    
     item.add_asset(
         key="zarr",
         asset=pystac.Asset(
-            href=s3_to_https(zarr_url),
+            href=zarr_href,
             roles=["data"]
         )
     )
@@ -325,7 +332,8 @@ def main(args):
         print("No STAC items created, skipping catalog generation")
 
 
-if __name__ == '__main__':
+def cli_main():
+    """Entry point for CLI script"""
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -385,3 +393,7 @@ if __name__ == '__main__':
                 shutil.rmtree(sd)
             except:
                 print(f'Failed to remove staging dir: {sd}')
+
+
+if __name__ == '__main__':
+    cli_main()

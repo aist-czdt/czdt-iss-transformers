@@ -14,7 +14,7 @@ from zarr.codecs import BloscCodec as Blosc
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
-from src.util import stage_s3, get_config
+from .util import stage_s3, get_config
 
 staging_dirs = []
 

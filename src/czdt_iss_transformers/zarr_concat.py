@@ -18,7 +18,7 @@ from numcodecs.blosc import Blosc as BloscZ2
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
-from src.util import open_zarr, get_config
+from .util import open_zarr, get_config
 
 staging_dirs = []
 
@@ -145,7 +145,8 @@ def main(args):
         )
 
 
-if __name__ == '__main__':
+def cli_main():
+    """Entry point for CLI script"""
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -211,3 +212,7 @@ if __name__ == '__main__':
                 shutil.rmtree(sd)
             except:
                 print(f'Failed to remove staging dir: {sd}')
+
+
+if __name__ == '__main__':
+    cli_main()
