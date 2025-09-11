@@ -3,15 +3,13 @@ import os
 import shutil
 import sys
 from urllib.parse import urlparse
-from datetime import datetime
 from pathlib import Path
 from typing import Tuple
-
+from rio_stac import create_stac_item
 
 import boto3
 import xarray as xr
 import pystac
-from shapely.geometry import Polygon, mapping
 from xarray import DataArray
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -30,6 +28,7 @@ DRIVER_OPTIONS = [
     'overview_quality', 'overview_predictor', 'geotiff_version', 'sparse_ok', 'statistics', 'tiling_scheme',
     'zoom_level', 'zoom_level_strategy', 'target_srs', 'res', 'extent', 'aligned_levels', 'add_alpha'
 ]
+COLLECTION_GLOBAL_PROPERTIES = ['title', 'instrument', 'platform', 'Conventions', 'summary', 'processing_level']
 
 
 def open_zarr_dataset(zarr_url, zarr_access):
@@ -73,37 +72,58 @@ def extract_bounds(data):
     return (minx, miny, maxx, maxy)
 
 
-def create_stac_item(cog_path, datetime_obj, bounds, var_attrs, global_attrs, collection_id):
+def s3_to_https(s3_url):
+    """
+    Convert an S3 URL to an HTTPS URL.
+    
+    Example:
+        s3://my-bucket/path/to/file.txt ->
+        https://my-bucket.s3.amazonaws.com/path/to/file.txt
+    """
+    if not s3_url.startswith("s3://"):
+        raise ValueError("Invalid S3 URL. It must start with 's3://'")
+
+    # Remove the 's3://' prefix
+    without_prefix = s3_url[5:]
+
+    # Split into bucket and key
+    parts = without_prefix.split('/', 1)
+    if len(parts) != 2:
+        raise ValueError("Invalid S3 URL format. Must be 's3://bucket/key'")
+
+    bucket, key = parts
+    https_url = f"https://{bucket}.s3.amazonaws.com/{key}"
+    return https_url
+
+
+def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collection_id, zarr_url):
     """Create STAC Item from COG file metadata.
     
     Args:
         cog_path (str): Path to COG file
         datetime_obj (datetime): Timestamp for the data
-        bounds (tuple): Spatial bounds (minx, miny, maxx, maxy)
         var_attrs (dict): Variable attributes from Zarr
         global_attrs (dict): Global attributes from Zarr dataset
         collection_id (str): Collection ID to reference
+        zarr_url (str): Path to the ZARR folder
         
     Returns:
         pystac.Item: STAC item object
     """
-    # Create bounding box and geometry
-    minx, miny, maxx, maxy = bounds
-    bbox = [minx, miny, maxx, maxy]
-    
-    # Create polygon geometry
-    geometry = mapping(Polygon.from_bounds(minx, miny, maxx, maxy))
     
     # Generate item ID from filename
     item_id = Path(cog_path).stem
     
     # Create STAC item
-    item = pystac.Item(
+    item = create_stac_item(
+        cog_path,
         id=item_id,
-        geometry=geometry,
-        bbox=bbox,
-        datetime=datetime_obj,
-        properties={}
+        input_datetime=datetime_obj,
+        properties={},
+        asset_href="",
+        with_proj=True,
+        with_raster=True,
+        with_eo=True
     )
     
     # Add variable-specific properties
@@ -116,21 +136,22 @@ def create_stac_item(cog_path, datetime_obj, bounds, var_attrs, global_attrs, co
     for prop in global_props:
         if prop in global_attrs:
             item.properties[f"global:{prop}"] = global_attrs[prop]
-    
-    # Add COG asset with relative path
-    # Extract just the filename from the full path for relative referencing
-    cog_filename = os.path.basename(cog_path)
-    
+
     # Create relative path from STAC item location to COG file
     # STAC items will be nested: collections/{collection_id}/{item_id}/{item_id}.json
     # COG files are in root output directory, so we need to go up 3 levels
-    relative_cog_path = f"../../../{cog_filename}"
+    relative_cog_path = f"../../{os.path.basename(cog_path)}"
+    asset_key = "asset"
+    if asset_key in item.assets:
+        asset = item.assets[asset_key]
+        # Change the href of the COG asset
+        asset.href = relative_cog_path
     
+    # Add ZARR asset url
     item.add_asset(
-        key="cog",
+        key="zarr",
         asset=pystac.Asset(
-            href=relative_cog_path,
-            media_type="image/tiff; application=geotiff; profile=cloud-optimized",
+            href=s3_to_https(zarr_url),
             roles=["data"]
         )
     )
@@ -147,6 +168,8 @@ def create_stac_collection_from_items(items, global_attrs, concept_id, var_name)
     Args:
         items (list): List of STAC items for this collection
         global_attrs (dict): Global attributes from Zarr dataset
+        concept_id (str): The DAAC concept id
+        var_name: the collection variable name
         
     Returns:
         pystac.Collection: STAC collection with proper extents
@@ -165,7 +188,9 @@ def create_stac_collection_from_items(items, global_attrs, concept_id, var_name)
     collection.update_extent_from_items()
     
     # Add global properties at collection level
-    collection.extra_fields = global_attrs.copy()
+    for attr in COLLECTION_GLOBAL_PROPERTIES:
+        if attr in global_attrs:
+            collection.extra_fields[attr] = global_attrs[attr]
     
     # Add metadata derived from collection_id
     collection.extra_fields["variable_name"] = var_name
@@ -191,14 +216,6 @@ def create_stac_catalog(concept_id, all_collections, global_attrs):
         id=f"{concept_id}-catalog",
         description=f"STAC catalog for {concept_id} dataset"
     )
-    
-    # Add global dataset properties to catalog
-    catalog.extra_fields = {}
-    global_props = ['Title', 'Institution', 'Source', 'Conventions']
-    for prop in global_props:
-        if prop in global_attrs:
-            catalog.extra_fields[f"global:{prop}"] = global_attrs[prop]
-    catalog.extra_fields["concept_id"] = concept_id
     
     for collection in all_collections:        
         # Add collection to catalog
@@ -258,20 +275,17 @@ def main(args):
             
             # Create STAC item for this COG file
             try:
-                # Extract spatial bounds
-                bounds = extract_bounds(data)
-                
                 # Create collection ID
                 collection_id = f"{args.concept_id}-{var_name}"
                 
                 # Create STAC item
-                stac_item = create_stac_item(
+                stac_item = create_stac_item_loc(
                     cog_path=tif_file,
                     datetime_obj=dt,
-                    bounds=bounds,
                     var_attrs=data.attrs,
                     global_attrs=ds.attrs,
-                    collection_id=collection_id
+                    collection_id=collection_id,
+                    zarr_url=zarr_url
                 )
                 
                 # Add to catalog items list

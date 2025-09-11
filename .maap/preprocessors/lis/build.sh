@@ -6,10 +6,10 @@ set -x
 basedir=$( cd "$(dirname "$0")"/../.. ; pwd -P )
 root_dir=$(dirname "${basedir}")
 
-pushd "${root_dir}"/preprocessors/cbefs
+pushd "${root_dir}"/preprocessors/lis
 
 set -e
 
 conda env update -f environment.yaml
-conda list -n cbefs_preprocessor
+conda list -n lis_preprocessor
 popd
