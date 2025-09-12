@@ -143,24 +143,29 @@ def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collec
         if prop in global_attrs:
             item.properties[f"global:{prop}"] = global_attrs[prop]
 
+    # Assume the STAC item JSON will be stored here (doesn't need to exist)
+    item_json_path = Path("output") / collection_id / item_id / f"{item_id}.json"
+    item_json_dir = item_json_path.parent
+
     # Create relative path from STAC item location to COG file
-    # STAC items will be nested: collections/{collection_id}/{item_id}/{item_id}.json
     # COG files are in root output directory, so we need to go up 3 levels
-    relative_cog_path = f"../../{os.path.basename(cog_path)}"
-    asset_key = "asset"
-    if asset_key in item.assets:
-        asset = item.assets[asset_key]
-        # Change the href of the COG asset
-        asset.href = relative_cog_path
-    
-    # Add ZARR asset url
-    parsed_zarr_url = urlparse(zarr_url)
-    if parsed_zarr_url.scheme == 's3':
-        zarr_href = s3_to_https(zarr_url)
+    # Compute relative hrefs for assets
+    cog_href = os.path.relpath(cog_path, start=item_json_dir)
+
+    # Handle Zarr
+    parsed_zarr = urlparse(zarr_url)
+    if parsed_zarr.scheme == "s3":
+        # Convert S3 URL to HTTPS
+        bucket, key = parsed_zarr.netloc, parsed_zarr.path.lstrip("/")
+        zarr_href = f"https://{bucket}.s3.amazonaws.com/{key}"
     else:
-        # Local path or other scheme - use as-is
-        zarr_href = f"../../{zarr_url}"
-    
+        zarr_href = os.path.relpath(zarr_url, start=item_json_dir)
+
+    # Update COG asset href
+    if "asset" in item.assets:
+        item.assets["asset"].href = cog_href
+
+    # Add Zarr asset
     item.add_asset(
         key="zarr",
         asset=pystac.Asset(
