@@ -31,7 +31,10 @@ dependencies = [
     "rio-stac",
     "shapely",
     "pyproj",
-    "numpy"
+    "numpy",
+    "psutil",
+    "pydap",
+    "xesmf>=0.7"
 ]
 
 [project.urls]
