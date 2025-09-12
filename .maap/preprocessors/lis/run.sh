@@ -8,4 +8,4 @@ root_dir=$(dirname "${basedir}")
 
 mkdir -p output
 source activate lis_preprocessor
-python -u "${root_dir}"/preprocessors/lis/src/lis_preprocessor.py
+python -u "${root_dir}"/src/czdt_iss_transformers/preprocessors/lis/lis_preprocessor.py
