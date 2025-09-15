@@ -130,7 +130,11 @@ def main(args):
             print('Detected conversion of zarr v3 data to zarr v2, clearing encoding data')
 
             for var in ds.variables:
-                ds[var].encoding = {enc: ds[var].encoding[enc] for enc in ds[var].encoding if enc == '_FillValue'}
+                ds[var].encoding = {
+                    enc: ds[var].encoding[enc]
+                    for enc in ds[var].encoding
+                    if enc in {'_FillValue', 'dtype'}
+                }
 
         compressor = BloscZ2(cname="blosclz", clevel=9)
         encoding = {vname: {'compressor': compressor} for vname in ds.data_vars}
