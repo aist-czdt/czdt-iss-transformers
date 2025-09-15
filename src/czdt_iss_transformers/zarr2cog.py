@@ -262,6 +262,7 @@ def convert_timeslice_to_cog(input_data: DataArray, time, var_name, lat_c, lon_c
 
     filename = f'{output_filename_prefix}_{dt.strftime("%Y-%m-%dT%H%M%SZ")}_{var_name}.tif'
 
+    os.makedirs(output_dir, exist_ok=True)
     out_path = os.path.join(output_dir, filename)
 
     logger.debug(f'Writing timestep {dt} to {out_path}')
