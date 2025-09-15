@@ -127,7 +127,8 @@ def main(args):
         # TODO: There MUST be a much better way to detect we're converting from Zarr3 to Zarr2
         #  which requires clearing all encoding settings (leaving _FillValue since I think it may be important)
         if 'serializer' in ds[list(ds.data_vars)[0]].encoding:
-            print('Detected conversion of zarr v3 data to zarr v2, clearing encoding data')
+            print('Detected conversion of zarr v3 data to zarr v2, clearing encoding data except for fill value and '
+                  'dtype')
 
             for var in ds.variables:
                 ds[var].encoding = {
