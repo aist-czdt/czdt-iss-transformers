@@ -36,19 +36,24 @@ def preprocess_lis_data(input_file_path, output_file_path=None):
 
     logger.info(f'Assigned coordinates & removed lat/lon as data vars:\n{ds}')
 
-    for i in range(len(ds.SoilMoist_tavg.SoilMoist_profiles)):
-        ds[f'SoilMoist_tavg_{i}'] = ds.SoilMoist_tavg.isel(SoilMoist_profiles=i)
+    for var in ds.data_vars:
+        xtra_dims = [d for d in ds[var].dims if d not in {'north_south', 'east_west'}]
 
-    del ds[f'SoilMoist_tavg']
+        if len(xtra_dims) == 0:
+            logger.info(f'Variable {var} is already 2D')
+        else:
+            logger.info(f'Variable {var} has {len(xtra_dims)} extra dimensions to split: {xtra_dims}')
 
-    logger.info('Split SoilMoist_tavg variable along SoilMoist_profiles dimension')
+            # TODO: If needed implement splitting for more than 1 extra dim
+            if len(xtra_dims) != 1:
+                raise NotImplementedError('Splitting of arbitrary dimensions is not yet implemented')
+            xtra_dim = xtra_dims[0]
 
-    for i in range(len(ds.SoilTemp_tavg.SoilTemp_profiles)):
-        ds[f'SoilTemp_tavg_{i}'] = ds.SoilTemp_tavg.isel(SoilTemp_profiles=i)
+            for i in range(len(ds[var][xtra_dim])):
+                ds[f'{var}_{i}'] = ds[var].isel({xtra_dim: i})
 
-    del ds[f'SoilTemp_tavg']
-
-    logger.info('Split SoilTemp_tavg variable along SoilTemp_profiles dimension')
+            del ds[var]
+            logger.info(f'Split {var} variable along {xtra_dim} dimension')
 
     logger.info('Re-assigning time coordinate to all vars')
 
