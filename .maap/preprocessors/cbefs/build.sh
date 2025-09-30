@@ -6,7 +6,7 @@ set -x
 basedir=$( cd "$(dirname "$0")"/../.. ; pwd -P )
 root_dir=$(dirname "${basedir}")
 
-pushd "${root_dir}"/preprocessors/cbefs
+pushd "${root_dir}"/src/czdt_iss_transformers/preprocessors/cbefs
 
 set -e
 

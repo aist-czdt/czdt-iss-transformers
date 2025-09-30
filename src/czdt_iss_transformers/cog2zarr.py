@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import re
 import shutil
@@ -25,11 +26,15 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH = os.path.join(SCRIPT_DIR, 'schema', 'geotiff_schema.yaml')
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
-from src.util import stage_s3
+from .util import stage_s3
 
 DT_UNITS = ['year', 'month', 'day', 'hour', 'minute', 'second', 'microsecond']
 UNIT_STARTS = dict(year=0, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
 
+# Configure logging: INFO for basic config, DEBUG for this module  
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 staging_dirs = []
 
@@ -170,10 +175,10 @@ def main(args):
                 **{u: UNIT_STARTS[u] for u in DT_UNITS[DT_UNITS.index(config['timestamp']['round_down_to'])+1:]}
             )
 
-        print(f'Mapped input {tiff} to time {ts}')
+        logger.debug(f'Mapped input {tiff} to time {ts}')
         times.setdefault(ts, []).append(tiff)
 
-    print(f'Mapped inputs to {len(times)} times')
+    logger.info(f'Mapped inputs to {len(times)} times')
 
     reprojected_slices = []
     resampling_method = config.get('resampling_method', 'nearest')
@@ -184,10 +189,10 @@ def main(args):
         resolution=config['resolution_deg'],
     )
 
-    print(f'Target bbox for mapping: {gbox}')
+    logger.debug(f'Target bbox for mapping: {gbox}')
 
     for timestamp in sorted(times.keys()):
-        print(f'Opening and merging {len(times[timestamp])} tiffs for timestamp {timestamp}')
+        logger.debug(f'Opening and merging {len(times[timestamp])} tiffs for timestamp {timestamp}')
 
         tiffs = [_open_tiff(f, config) for f in times[timestamp]]
 
@@ -202,7 +207,7 @@ def main(args):
             if config['resolution_deg'] <= 0:
                 raise ValueError('resolution_deg must be greater than zero')
 
-            print('Reprojecting to EPSG:4326')
+            logger.debug('Reprojecting to EPSG:4326')
             reprojected = reproject(
                 src=times[timestamp],
                 how=gbox,
@@ -211,12 +216,12 @@ def main(args):
             )
 
             for var in reprojected.data_vars:
-                print(reprojected[var].dtype, times[timestamp][var].dtype)
+                logger.debug(f'{var} dtypes - reprojected: {reprojected[var].dtype}, original: {times[timestamp][var].dtype}')
                 if reprojected[var].dtype != times[timestamp][var].dtype:
-                    print(f'Casting {var} from {reprojected[var].dtype} back to {times[timestamp][var].dtype}')
+                    logger.debug(f'Casting {var} from {reprojected[var].dtype} back to {times[timestamp][var].dtype}')
                     reprojected[var] = reprojected[var].astype(times[timestamp][var].dtype)
         else:
-            print('Data in required projection. Using native data')
+            logger.debug('Data in required projection. Using native data')
             reprojected = times[timestamp].rename(x='longitude', y='latitude')
 
         # print(f'debug (post reproj): {reprojected}')
@@ -228,24 +233,24 @@ def main(args):
         #         # reprojected[var] = reprojected[var].where(reprojected[var] != config['nodata'])
         #         reprojected[var].attrs['_FillValue'] = config['nodata']
 
-        print('Adding timestamp')
+        logger.debug('Adding timestamp')
         reprojected = reprojected.expand_dims('time').assign_coords(
             time=[np.datetime64(timestamp, 'ns')]
         )
 
-        print(f'Finished dataset for timestamp:\n{reprojected}')
+        logger.debug(f'Finished dataset for timestamp:\n{reprojected}')
         reprojected_slices.append(reprojected)
 
     final_ds = xr.concat(reprojected_slices, dim='time').sortby('time')
-    print(f'Concatenated all timestamps into single dataset:\n{final_ds}')
+    logger.info(f'Concatenated all timestamps into single dataset:\n{final_ds}')
 
     if args.duration is not None:
         ds_duration = pd.Timedelta((final_ds['time'][-1] - final_ds['time'][0]).data.item())
 
-        print(f'new dataset duration: {ds_duration}')
+        logger.info(f'New dataset duration: {ds_duration}')
 
         if ds_duration > args.duration:
-            print('Dataset duration exceeds max duration provided')
+            logger.warning('Dataset duration exceeds max duration provided')
 
             idx = 0
 
@@ -254,10 +259,10 @@ def main(args):
 
             final_ds = final_ds.isel(time=slice(idx, None))
 
-            print(f'Dropped {idx:,} time steps. New dataset duration: '
+            logger.info(f'Dropped {idx:,} time steps. New dataset duration: '
                   f'{pd.Timedelta((final_ds["time"][-1] - final_ds["time"][0]).data.item())}')
 
-    print(f'Setting chunk config: {chunk_config}')
+    logger.debug(f'Setting chunk config: {chunk_config}')
 
     for var in final_ds.data_vars:
         final_ds[var] = final_ds[var].chunk(chunk_config)
@@ -269,7 +274,7 @@ def main(args):
         for var in final_ds.data_vars:
             encoding[var]['fill_value'] = config['nodata']
 
-    print(f'Writing to zarr file: {os.path.join("output", output)}')
+    logger.info(f'Writing to zarr file: {os.path.join("output", output)}')
 
     final_ds.to_zarr(
         os.path.join('output', output),
@@ -280,7 +285,8 @@ def main(args):
     )
 
 
-if __name__ == '__main__':
+def cli_main():
+    """Entry point for CLI script"""
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -317,14 +323,18 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    print(args, flush=True)
+    logger.debug(f'CLI arguments: {args}')
 
     try:
         main(args)
     finally:
         for sd in staging_dirs:
             try:
-                print(f'Cleaning up staging dir: {sd}')
+                logger.debug(f'Cleaning up staging dir: {sd}')
                 shutil.rmtree(sd)
-            except:
-                print(f'Failed to remove staging dir: {sd}')
+            except Exception as e:
+                logger.error(f'Failed to remove staging dir: {sd}: {e}')
+
+
+if __name__ == '__main__':
+    cli_main()

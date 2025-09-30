@@ -181,3 +181,4 @@ test*
 .claude/
 
 .DS_Store
+test/files/*

@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import shutil
 import sys
@@ -15,7 +16,12 @@ from xarray import DataArray
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
-from src.util import open_zarr
+from .util import open_zarr
+
+# Configure logging: INFO for basic config, DEBUG for this module  
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 staging_dirs = []
 
@@ -35,9 +41,9 @@ def open_zarr_dataset(zarr_url, zarr_access):
     parsed_url = urlparse(zarr_url)
 
     if parsed_url.scheme in ('', 'file'):
-        print(f'Opening local zarr dataset at {zarr_url}')
+        logger.info(f'Opening local zarr dataset at {zarr_url}')
         ds = xr.open_zarr(zarr_url, consolidated=True)
-        print(ds)
+        logger.debug(f'Dataset info: {ds}')
         return ds
 
     session = boto3.Session(profile_name=os.getenv('AWS_PROFILE', None))
@@ -49,8 +55,8 @@ def open_zarr_dataset(zarr_url, zarr_access):
     if stage_dir is not None:
         staging_dirs.append(stage_dir)
 
-    print(f'Opened zarr dataset at {zarr_url}')
-    print(ds)
+    logger.info(f'Opened zarr dataset at {zarr_url}')
+    logger.debug(f'Dataset info: {ds}')
     return ds
 
 
@@ -137,21 +143,33 @@ def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collec
         if prop in global_attrs:
             item.properties[f"global:{prop}"] = global_attrs[prop]
 
+    # Assume the STAC item JSON will be stored here (doesn't need to exist)
+    item_json_path = Path("output") / collection_id / item_id / f"{item_id}.json"
+    item_json_dir = item_json_path.parent
+
     # Create relative path from STAC item location to COG file
-    # STAC items will be nested: collections/{collection_id}/{item_id}/{item_id}.json
     # COG files are in root output directory, so we need to go up 3 levels
-    relative_cog_path = f"../../{os.path.basename(cog_path)}"
-    asset_key = "asset"
-    if asset_key in item.assets:
-        asset = item.assets[asset_key]
-        # Change the href of the COG asset
-        asset.href = relative_cog_path
-    
-    # Add ZARR asset url
+    # Compute relative hrefs for assets
+    cog_href = os.path.relpath(cog_path, start=item_json_dir)
+
+    # Handle Zarr
+    parsed_zarr = urlparse(zarr_url)
+    if parsed_zarr.scheme == "s3":
+        # Convert S3 URL to HTTPS
+        bucket, key = parsed_zarr.netloc, parsed_zarr.path.lstrip("/")
+        zarr_href = f"https://{bucket}.s3.amazonaws.com/{key}"
+    else:
+        zarr_href = os.path.relpath(zarr_url, start=item_json_dir)
+
+    # Update COG asset href
+    if "asset" in item.assets:
+        item.assets["asset"].href = cog_href
+
+    # Add Zarr asset
     item.add_asset(
         key="zarr",
         asset=pystac.Asset(
-            href=s3_to_https(zarr_url),
+            href=zarr_href,
             roles=["data"]
         )
     )
@@ -237,16 +255,17 @@ def convert_timeslice_to_cog(input_data: DataArray, time, var_name, lat_c, lon_c
         latitude = data['y'].to_numpy()
 
         if latitude[1] - latitude[0] >= 0:
-            print(f'Flipping latitude for {var_name}')
+            logger.debug(f'Flipping latitude for {var_name}')
             data = data.isel({'y': slice(None, None, -1)})
     except Exception as e:
-        print(f'Could not check latitude ordering for {var_name} due to {e}')
+        logger.warning(f'Could not check latitude ordering for {var_name} due to {e}')
 
     filename = f'{output_filename_prefix}_{dt.strftime("%Y-%m-%dT%H%M%SZ")}_{var_name}.tif'
 
+    os.makedirs(output_dir, exist_ok=True)
     out_path = os.path.join(output_dir, filename)
 
-    print(f'Writing timestep {dt} to {out_path}')
+    logger.debug(f'Writing timestep {dt} to {out_path}')
 
     data.rio.to_raster(out_path, driver='COG', sharing=False, **DRIVER_KWARGS)
     return data, out_path
@@ -259,13 +278,13 @@ def main(args):
 
     ds = open_zarr_dataset(zarr_url, args.zarr_access)
 
-    print(f'{len(ds.data_vars)} variables, {len(ds[time_c])} time steps')
+    logger.info(f'{len(ds.data_vars)} variables, {len(ds[time_c])} time steps')
     
     # Track all created collections for catalog creation
     all_collections = []
 
     for var_name in ds.data_vars:
-        print(f'Iterating over variable {var_name}')
+        logger.debug(f'Iterating over variable {var_name}')
         var_items = []
         da = ds[var_name]
 
@@ -292,13 +311,13 @@ def main(args):
                 var_items.append(stac_item)
                 
             except Exception as e:
-                print(f'Warning: Failed to create STAC item for {tif_file}: {e}')
+                logger.warning(f'Failed to create STAC item for {tif_file}: {e}')
         if var_items:
             all_collections.append(create_stac_collection_from_items(var_items, ds.attrs, args.concept_id, var_name))
 
     # Create and save complete STAC catalog
     if all_collections:
-        print(f"\nCreating STAC catalog from {len(all_collections)} collections...")
+        logger.info(f"Creating STAC catalog from {len(all_collections)} collections...")
         try:
             catalog = create_stac_catalog(
                 args.concept_id, 
@@ -313,19 +332,20 @@ def main(args):
             )
             
             collections = list(catalog.get_collections())
-            print(f"✓ Created STAC catalog with {len(collections)} collections")
+            logger.info(f"Created STAC catalog with {len(collections)} collections")
             for collection in collections:
                 item_count = len(list(collection.get_items()))
-                print(f"  - {collection.id}: {item_count} items")
-            print(f"✓ Catalog saved to: output/catalog.json")
+                logger.info(f"  - {collection.id}: {item_count} items")
+            logger.info(f"Catalog saved to: output/catalog.json")
             
         except Exception as e:
-            print(f'Warning: Failed to create STAC catalog: {e}')
+            logger.warning(f'Failed to create STAC catalog: {e}')
     else:
-        print("No STAC items created, skipping catalog generation")
+        logger.warning("No STAC items created, skipping catalog generation")
 
 
-if __name__ == '__main__':
+def cli_main():
+    """Entry point for CLI script"""
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -374,14 +394,18 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    print(args)
+    logger.debug(f'CLI arguments: {args}')
 
     try:
         main(args)
     finally:
         for sd in staging_dirs:
             try:
-                print(f'Cleaning up staging dir: {sd}')
+                logger.debug(f'Cleaning up staging dir: {sd}')
                 shutil.rmtree(sd)
-            except:
-                print(f'Failed to remove staging dir: {sd}')
+            except Exception as e:
+                logger.error(f'Failed to remove staging dir: {sd}: {e}')
+
+
+if __name__ == '__main__':
+    cli_main()
