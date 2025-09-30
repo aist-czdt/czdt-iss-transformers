@@ -21,7 +21,7 @@ sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 from .util import open_zarr, get_config
 
-# Configure logging: INFO for basic config, DEBUG for this module  
+# Configure logging: INFO for basic config, DEBUG for this module
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -125,10 +125,15 @@ def main(args):
         # TODO: There MUST be a much better way to detect we're converting from Zarr3 to Zarr2
         #  which requires clearing all encoding settings (leaving _FillValue since I think it may be important)
         if 'serializer' in ds[list(ds.data_vars)[0]].encoding:
-            logger.debug('Detected conversion of zarr v3 data to zarr v2, clearing encoding data')
+            logger.debug('Detected conversion of zarr v3 data to zarr v2, clearing encoding data except for fill value and '
+                         'dtype')
 
             for var in ds.variables:
-                ds[var].encoding = {enc: ds[var].encoding[enc] for enc in ds[var].encoding if enc == '_FillValue'}
+                ds[var].encoding = {
+                    enc: ds[var].encoding[enc]
+                    for enc in ds[var].encoding
+                    if enc in {'_FillValue', 'dtype'}
+                }
 
         compressor = BloscZ2(cname="blosclz", clevel=9)
         encoding = {vname: {'compressor': compressor} for vname in ds.data_vars}
