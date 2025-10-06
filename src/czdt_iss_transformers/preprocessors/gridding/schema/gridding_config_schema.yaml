@@ -1,0 +1,5 @@
+input_groups: list(str())
+exclude_root: bool(required=False)
+latitude_var: str()
+longitude_var: str()
+concat_dim: str()

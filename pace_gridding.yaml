@@ -1,0 +1,7 @@
+input_groups:
+  - navigation_data
+  - geophysical_data
+exclude_root: true
+latitude_var: latitude
+longitude_var: longitude
+concat_dim: number_of_lines

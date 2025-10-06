@@ -195,7 +195,6 @@ def cli_main():
         help='Path to input NetCDF files (local directory/file or S3 URL prefix)'
     )
 
-
     parser.add_argument(
         '-p', '--pattern',
         default='*.nc',
