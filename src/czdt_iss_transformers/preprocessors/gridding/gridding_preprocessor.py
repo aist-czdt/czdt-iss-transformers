@@ -233,7 +233,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '-p', '--pattern',
         default='*.nc',
-        help='Glob pattern to match. Important if input is a directory with non-input files present'
+        help='Glob pattern to match input files. Important if input is a directory with non-input files present'
     )
 
     parser.add_argument(
