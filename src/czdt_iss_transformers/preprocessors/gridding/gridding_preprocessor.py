@@ -14,7 +14,10 @@ from numcodecs.blosc import Blosc as BloscZ2
 from pyresample import kd_tree, geometry, SwathDefinition
 from zarr.codecs import BloscCodec as Blosc
 
-from src.czdt_iss_transformers.util import stage_s3
+try:
+    from src.czdt_iss_transformers.util import stage_s3
+except ImportError:
+    from czdt_iss_transformers.util import stage_s3
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
 logger = logging.getLogger(__name__)
