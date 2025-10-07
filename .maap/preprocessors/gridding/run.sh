@@ -95,7 +95,7 @@ fi
 
 if [[ -n "${output_extent}" ]]; then
   args+=(
-    --output-extent "${output_extent}"
+    --output-extent "\"${output_extent}\""
   )
 fi
 

@@ -12,4 +12,7 @@ set -e
 
 conda env update -f environment.yaml
 conda list -n cf2zarr
+
+conda run -n cf2zarr pip install -e .
+
 popd
