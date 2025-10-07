@@ -3,6 +3,7 @@ import logging
 import os
 from glob import glob
 from pathlib import Path
+from sys import stderr
 from typing import Tuple, Union, Literal, List
 
 import boto3
@@ -17,14 +18,8 @@ from zarr.codecs import BloscCodec as Blosc
 try:
     from czdt_iss_transformers.util import stage_s3
 except ImportError:
-    print('could not import czdt_iss_transformers.util, trying different path')
-
-
-try:
+    print('could not import czdt_iss_transformers.util, trying different path', file=stderr)
     from src.czdt_iss_transformers.util import stage_s3
-except ImportError:
-    print('could not import src.czdt_iss_transformers.util, trying different path')
-    from czdt_iss_transformers.util import stage_s3
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
 logger = logging.getLogger(__name__)

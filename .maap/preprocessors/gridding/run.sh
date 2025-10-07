@@ -95,7 +95,7 @@ fi
 
 if [[ -n "${output_extent}" ]]; then
   args+=(
-    --output-extent "\"${output_extent}\""
+    --output-extent="${output_extent}"
   )
 fi
 
@@ -124,6 +124,6 @@ fi
 
 echo "Running gridding preprocessor with parameters: ${args[@]}"
 
-export PYTHONPATH="${root_dir}:${PYTHONPATH}"
+#export PYTHONPATH="${root_dir}:${PYTHONPATH}"
 
 python -u "${root_dir}"/src/czdt_iss_transformers/preprocessors/gridding/gridding_preprocessor.py "${args[@]}"
