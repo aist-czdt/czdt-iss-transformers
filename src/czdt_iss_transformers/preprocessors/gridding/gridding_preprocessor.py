@@ -17,6 +17,7 @@ from zarr.codecs import BloscCodec as Blosc
 try:
     from src.czdt_iss_transformers.util import stage_s3
 except ImportError:
+    print('could not import util, trying different path')
     from czdt_iss_transformers.util import stage_s3
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')

@@ -124,4 +124,6 @@ fi
 
 echo "Running gridding preprocessor with parameters: ${args[@]}"
 
+export PYTHONPATH="${root_dir}:${PYTHONPATH}"
+
 python -u "${root_dir}"/src/czdt_iss_transformers/preprocessors/gridding/gridding_preprocessor.py "${args[@]}"
