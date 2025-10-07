@@ -34,6 +34,10 @@ SCHEMA_PATH = os.path.join(SCRIPT_DIR, 'schema', 'gridding_config_schema.yaml')
 staging_dirs = []
 
 
+def foo():
+    ...
+
+
 def _parse_config(config_path: str) -> dict:
     schema = yamale.make_schema(SCHEMA_PATH)
     data = yamale.make_data(config_path)
@@ -81,9 +85,9 @@ def grid_netcdfs(
     variables: Union[List[str], str] = None,
     output_extent: Tuple[float, float, float, float] = DEFAULT_EXTENT,
     output_grid_resolution: Union[float, Tuple[int, int]] = DEFAULT_GRID_RESOLUTION,
-    output_format: Literal['netcdf', 'zarr'] = 'netcdf',
+    output_format: Literal['netcdf', 'zarr', 'xarray'] = 'netcdf',
     **output_kwargs
-):
+) -> Union[None, xr.Dataset]:
     config = _parse_config(config_path)
 
     Path('output').mkdir(exist_ok=True, parents=True)
@@ -187,7 +191,9 @@ def grid_netcdfs(
         output_path = os.path.join('output', f'{output_name}.nc')
         logger.info(f'Writing netcdf: {output_path}')
         new_ds.to_netcdf(output_path)
-    else:
+    elif output_format == 'zarr':
+        # TODO: Need to add configuration for chunking...
+
         zarr_version = output_kwargs.pop('zarr_version', 3)
 
         if zarr_version == 3:
@@ -213,6 +219,10 @@ def grid_netcdfs(
             zarr_version=zarr_version,
             **output_kwargs
         )
+    elif output_format == 'xarray':
+        return new_ds
+    else:
+        raise RuntimeError(f'Unsupported output format: {output_format}')
 
 
 if __name__ == '__main__':
