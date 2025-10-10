@@ -16,7 +16,11 @@ from xarray import DataArray
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
-from .util import open_zarr
+try:
+    from czdt_iss_transformers.util import stage_s3
+except ImportError:
+    print('could not import czdt_iss_transformers.util, trying different path', file=sys.stderr)
+    from .util import open_zarr
 
 # Configure logging: INFO for basic config, DEBUG for this module  
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
