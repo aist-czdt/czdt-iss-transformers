@@ -6,7 +6,7 @@ root_dir=$(dirname "${basedir}")
 
 mkdir -p output
 source activate cf2zarr
-python "${root_dir}"/src/cf2zarr.py \
+python "${root_dir}"/src/czdt_iss_transformers/cf2zarr.py \
   $([ -n "$1" ] && echo $1)\
   --input-s3 $2 \
   --zarr $3 \

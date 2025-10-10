@@ -6,7 +6,7 @@ root_dir=$(dirname "${basedir}")
 
 mkdir -p output
 source activate cf2zarr
-python "${root_dir}"/src/zarr2cog.py \
+python "${root_dir}"/src/czdt_iss_transformers/zarr2cog.py \
   $1 \
   --zarr-access $2 \
   --time $3 \
