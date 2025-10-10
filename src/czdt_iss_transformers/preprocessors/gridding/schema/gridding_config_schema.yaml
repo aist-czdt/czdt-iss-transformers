@@ -4,6 +4,7 @@ latitude_var: str()
 longitude_var: str()
 concat_dim: str()
 chunks: include('chunks')
+drop_vars: list(str(), required=False)
 
 ---
 chunks:

@@ -56,7 +56,7 @@ def _open_scene(path: str, config: dict) -> xr.Dataset:
 
     logger.info(f'Opening NetCDF at {path}')
 
-    return xr.merge([xr.open_dataset(path, group=g) for g in groups])
+    return xr.merge([xr.open_dataset(path, group=g).drop_vars(config.get('drop_vars', [])) for g in groups])
 
 
 def _resample(src_data, src_def, target_def, expected_shape):
@@ -123,7 +123,7 @@ def grid_netcdfs(
 
     input_datasets = [_open_scene(path, config) for path in data_path]
 
-    ds = xr.concat(input_datasets, dim=config['concat_dim'])
+    ds = xr.concat(input_datasets, dim=config['concat_dim'], data_vars='minimal')
 
     logger.info(f'Concatenated dataset: {ds}')
 
