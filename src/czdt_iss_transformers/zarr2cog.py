@@ -17,7 +17,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 try:
-    from czdt_iss_transformers.util import stage_s3
+    from czdt_iss_transformers.util import open_zarr
 except ImportError:
     print('could not import czdt_iss_transformers.util, trying different path', file=sys.stderr)
     from .util import open_zarr
