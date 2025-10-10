@@ -5,3 +5,6 @@ exclude_root: true
 latitude_var: latitude
 longitude_var: longitude
 concat_dim: number_of_lines
+chunks:
+  latitude: 500
+  longitude: 500

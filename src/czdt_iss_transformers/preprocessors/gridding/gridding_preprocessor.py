@@ -185,6 +185,16 @@ def grid_netcdfs(
 
     new_ds = xr.Dataset(data_vars=data_vars, coords={'lon': ('lon', lons), 'lat': ('lat', lats)}, attrs=ds.attrs)
 
+    chunk_config = {
+        'lat': config['chunks']['latitude'],
+        'lon': config['chunks']['longitude'],
+    }
+
+    logger.info(f'Setting chunk configuration to all variables: {chunk_config}')
+
+    for var in new_ds.data_vars:
+        new_ds[var] = new_ds[var].chunk(chunk_config)
+
     logger.info(f'Gridded dataset: {new_ds}')
 
     if output_format == 'netcdf':
@@ -198,6 +208,7 @@ def grid_netcdfs(
 
         if zarr_version == 3:
             compressor = Blosc(cname="blosclz", clevel=9)
+            output_kwargs['consolidated'] = False
         elif zarr_version == 2:
             compressor = BloscZ2(cname="blosclz", clevel=9)
             if 'consolidated' not in output_kwargs:
@@ -216,7 +227,7 @@ def grid_netcdfs(
             mode='w-',
             encoding=encoding,
             write_empty_chunks=False,
-            zarr_version=zarr_version,
+            zarr_format=zarr_version,
             **output_kwargs
         )
     elif output_format == 'xarray':

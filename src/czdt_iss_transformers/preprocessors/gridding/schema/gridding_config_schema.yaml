@@ -3,3 +3,11 @@ exclude_root: bool(required=False)
 latitude_var: str()
 longitude_var: str()
 concat_dim: str()
+chunks: include('chunks')
+
+---
+chunks:
+  latitude: int(min=1)
+  longitude: int(min=1)
+
+
