@@ -202,8 +202,6 @@ def grid_netcdfs(
         logger.info(f'Writing netcdf: {output_path}')
         new_ds.to_netcdf(output_path)
     elif output_format == 'zarr':
-        # TODO: Need to add configuration for chunking...
-
         zarr_version = output_kwargs.pop('zarr_version', 3)
 
         if zarr_version == 3:
