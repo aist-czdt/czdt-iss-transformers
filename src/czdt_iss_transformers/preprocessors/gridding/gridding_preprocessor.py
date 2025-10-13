@@ -2,10 +2,12 @@ import argparse
 import logging
 import os
 import shutil
+import tempfile
 from glob import glob
 from pathlib import Path
 from sys import stderr
 from typing import Tuple, Union, Literal, List
+from urllib.parse import urlparse
 
 import boto3
 import numpy as np
@@ -35,9 +37,27 @@ SCHEMA_PATH = os.path.join(SCRIPT_DIR, 'schema', 'gridding_config_schema.yaml')
 staging_dirs = []
 
 
-def _parse_config(config_path: str) -> dict:
+def _localize_config(config_url: str, client) -> str:
+    parsed_url = urlparse(config_url)
+
+    if parsed_url.scheme in {'file', ''}:
+        return config_url.removeprefix('file://')
+    elif parsed_url.scheme == 's3':
+        fd, local_file = tempfile.mkstemp(prefix='config', suffix='_temp.yaml')
+
+        with os.fdopen(fd, 'wb') as f:
+            client.download_fileobj(parsed_url.netloc, parsed_url.path.lstrip('/'), f)
+
+        logger.info(f'Localized config file {config_url} to {local_file}')
+
+        return local_file
+    else:
+        raise ValueError(f'Unsupported URL scheme: {parsed_url.scheme}')
+
+
+def _parse_config(config_path: str, client) -> dict:
     schema = yamale.make_schema(SCHEMA_PATH)
-    data = yamale.make_data(config_path)
+    data = yamale.make_data(_localize_config(config_path, client))
 
     yamale.validate(schema, data, strict=True)
 
@@ -250,7 +270,10 @@ def grid_netcdfs(
     output_format: Literal['netcdf', 'zarr', 'xarray'] = 'netcdf',
     **output_kwargs
 ) -> Union[None, xr.Dataset]:
-    config = _parse_config(config_path)
+    session = boto3.Session(profile_name=os.getenv('AWS_PROFILE', None))
+    client = session.client('s3')
+
+    config = _parse_config(config_path, client)
 
     Path('output').mkdir(exist_ok=True, parents=True)
 
