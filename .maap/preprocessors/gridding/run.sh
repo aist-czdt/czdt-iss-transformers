@@ -72,8 +72,14 @@ echo "========================================"
 
 args=(
   "${input_url}"
-  "${config}"
 )
+
+for cfg in ${config//,/ }
+do
+  args+=(
+    "${cfg}"
+  )
+done
 
 if [[ -n "${output}" ]]; then
   args+=(

@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import shutil
 from glob import glob
 from pathlib import Path
 from sys import stderr
@@ -32,10 +33,6 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH = os.path.join(SCRIPT_DIR, 'schema', 'gridding_config_schema.yaml')
 
 staging_dirs = []
-
-
-def foo():
-    ...
 
 
 def _parse_config(config_path: str) -> dict:
@@ -77,130 +74,16 @@ def _resample(src_data, src_def, target_def, expected_shape):
     return unmasked_result
 
 
-def grid_netcdfs(
-    input_path: str,
+def _output_dataset(
+    ds: xr.Dataset,
     output_name: str,
-    config_path: str,
-    pattern: str = '*.nc',
-    variables: Union[List[str], str] = None,
-    output_extent: Tuple[float, float, float, float] = DEFAULT_EXTENT,
-    output_grid_resolution: Union[float, Tuple[int, int]] = DEFAULT_GRID_RESOLUTION,
     output_format: Literal['netcdf', 'zarr', 'xarray'] = 'netcdf',
     **output_kwargs
 ) -> Union[None, xr.Dataset]:
-    config = _parse_config(config_path)
-
-    Path('output').mkdir(exist_ok=True, parents=True)
-
-    if variables is None:
-        variables = []
-    elif isinstance(variables, str):
-        variables = variables.split(',')
-
-    # Flatten nested comma-separated variables
-    flat_variables = []
-    for v in variables:
-        if isinstance(v, str):
-            flat_variables.extend(v.split(','))
-        else:
-            flat_variables.append(v)
-    variables = flat_variables
-
-    if input_path.startswith('s3://'):
-        session = boto3.Session(profile_name=os.getenv('AWS_PROFILE', None))
-        client = session.client('s3')
-        input_stage_dir = stage_s3(input_path, client)
-        staging_dirs.append(input_stage_dir)
-        data_path = glob(os.path.join(input_stage_dir, pattern))
-    else:
-        # Local input
-        if os.path.isfile(input_path):
-            # Single file
-            data_path = [input_path]
-        else:
-            # Directory with pattern
-            data_path = glob(os.path.join(input_path, pattern))
-
-    input_datasets = [_open_scene(path, config) for path in data_path]
-
-    ds = xr.concat(input_datasets, dim=config['concat_dim'], data_vars='minimal')
-
-    logger.info(f'Concatenated dataset: {ds}')
-
-    # Handle variable selection
-    if len(variables) == 0:
-        variable_name = list(ds.data_vars.keys())[0]
-        variables = [variable_name]
-    elif variables[0] == '*':
-        logger.info('All variables selected - skipping subselection')
-        variables = []
-
-    if variables:
-        # Ensure lat and lon remain
-        variables.extend([config['latitude_var'], config['longitude_var']])
-        variables = list(set(variables))
-
-        logger.info(f'Subselecting vars: {variables}')
-        ds = ds[variables]
-
-    swath_def = SwathDefinition(
-        lons=ds[config['longitude_var']].data,
-        lats=ds[config['latitude_var']].data,
-    )
-
-    if isinstance(output_grid_resolution, float):
-        height = int(360 / output_grid_resolution)
-        width = int(180 / output_grid_resolution)
-    else:
-        width, height = output_grid_resolution
-
-    area_def = geometry.AreaDefinition(
-        'EPSG:4326 - WGS 84',
-        'WGS84 - World Geodetic System 1984, used in GPS',
-        'EPSG:4326',
-        '+proj=longlat +datum=WGS84 +no_defs +type=crs',
-        width,
-        height,
-        output_extent
-    )
-
-    logger.info(f'Source definition: {swath_def}')
-    logger.info(f'Target definition: {area_def}')
-
-    data_vars = {}
-
-    for var in ds.data_vars:
-        if var in {config['longitude_var'], config['latitude_var']}:
-            continue
-
-        logger.info(f'Gridding variable: {var}')
-        data_vars[var] = (
-            ('lat', 'lon'),
-            _resample(ds[var], swath_def, area_def, (height, width)),
-            ds[var].attrs
-        )
-
-    lons, lats = area_def.get_lonlats()
-    lons, lats = lons[0], lats.T[0]
-
-    new_ds = xr.Dataset(data_vars=data_vars, coords={'lon': ('lon', lons), 'lat': ('lat', lats)}, attrs=ds.attrs)
-
-    chunk_config = {
-        'lat': config['chunks']['latitude'],
-        'lon': config['chunks']['longitude'],
-    }
-
-    logger.info(f'Setting chunk configuration to all variables: {chunk_config}')
-
-    for var in new_ds.data_vars:
-        new_ds[var] = new_ds[var].chunk(chunk_config)
-
-    logger.info(f'Gridded dataset: {new_ds}')
-
     if output_format == 'netcdf':
         output_path = os.path.join('output', f'{output_name}.nc')
         logger.info(f'Writing netcdf: {output_path}')
-        new_ds.to_netcdf(output_path)
+        ds.to_netcdf(output_path)
     elif output_format == 'zarr':
         zarr_version = output_kwargs.pop('zarr_version', 3)
 
@@ -214,13 +97,13 @@ def grid_netcdfs(
         else:
             raise ValueError(f'Unsupported zarr version: {zarr_version}')
 
-        encoding = {vname: {'compressors': [compressor]} for vname in new_ds.data_vars}
+        encoding = {vname: {'compressors': [compressor]} for vname in ds.data_vars}
 
         output_path = os.path.join('output', f'{output_name}.zarr')
 
         logger.info(f'Writing zarr: {output_path}')
 
-        new_ds.to_zarr(
+        ds.to_zarr(
             output_path,
             mode='w-',
             encoding=encoding,
@@ -229,12 +112,12 @@ def grid_netcdfs(
             **output_kwargs
         )
     elif output_format == 'xarray':
-        return new_ds
+        return ds
     else:
         raise RuntimeError(f'Unsupported output format: {output_format}')
 
 
-if __name__ == '__main__':
+def get_parser():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -244,7 +127,10 @@ if __name__ == '__main__':
 
     parser.add_argument(
         'config',
-        help='Path to config file (should be local)'
+        nargs='+',
+        help='Path to config file (should be local). If more than one files are provided, the gridding preprocessor '
+             'will be executed for all configurations and the results will be combined by the method in the '
+             '--combine parameter'
     )
 
     parser.add_argument(
@@ -344,10 +230,129 @@ if __name__ == '__main__':
         help='Version of zarr standard to output. Only applies if --format=zarr, otherwise does nothing.'
     )
 
-    args = parser.parse_args()
+    parser.add_argument(
+        '-c', '--combine',
+        choices=['sum', 'mean', 'median', 'min', 'max'],
+        default='mean',
+        help='Method to combine the output datasets. Can be sum, mean, median, min, max'
+    )
 
-    print(args)
+    return parser
 
+
+def grid_netcdfs(
+    input_paths: List[str],
+    output_name: str,
+    config_path: str,
+    variables: Union[List[str], str] = None,
+    output_extent: Tuple[float, float, float, float] = DEFAULT_EXTENT,
+    output_grid_resolution: Union[float, Tuple[int, int]] = DEFAULT_GRID_RESOLUTION,
+    output_format: Literal['netcdf', 'zarr', 'xarray'] = 'netcdf',
+    **output_kwargs
+) -> Union[None, xr.Dataset]:
+    config = _parse_config(config_path)
+
+    Path('output').mkdir(exist_ok=True, parents=True)
+
+    if variables is None:
+        variables = []
+    elif isinstance(variables, str):
+        variables = variables.split(',')
+
+    # Flatten nested comma-separated variables
+    flat_variables = []
+    for v in variables:
+        if isinstance(v, str):
+            flat_variables.extend(v.split(','))
+        else:
+            flat_variables.append(v)
+    variables = flat_variables
+
+    input_datasets = [_open_scene(path, config) for path in input_paths]
+
+    ds = xr.concat(input_datasets, dim=config['concat_dim'], data_vars='minimal')
+
+    logger.info(f'Concatenated dataset: {ds}')
+
+    # Handle variable selection
+    if len(variables) == 0:
+        variable_name = list(ds.data_vars.keys())[0]
+        variables = [variable_name]
+    elif variables[0] == '*':
+        logger.info('All variables selected - skipping subselection')
+        variables = []
+
+    if variables:
+        # Ensure lat and lon remain
+        variables.extend([config['latitude_var'], config['longitude_var']])
+        variables = list(set(variables))
+
+        logger.info(f'Subselecting vars: {variables}')
+        ds = ds[variables]
+
+    swath_def = SwathDefinition(
+        lons=ds[config['longitude_var']].data,
+        lats=ds[config['latitude_var']].data,
+    )
+
+    if isinstance(output_grid_resolution, float):
+        height = int(360 / output_grid_resolution)
+        width = int(180 / output_grid_resolution)
+    else:
+        width, height = output_grid_resolution
+
+    area_def = geometry.AreaDefinition(
+        'EPSG:4326 - WGS 84',
+        'WGS84 - World Geodetic System 1984, used in GPS',
+        'EPSG:4326',
+        '+proj=longlat +datum=WGS84 +no_defs +type=crs',
+        width,
+        height,
+        output_extent
+    )
+
+    logger.info(f'Source definition: {swath_def}')
+    logger.info(f'Target definition: {area_def}')
+
+    data_vars = {}
+
+    for var in ds.data_vars:
+        if var in {config['longitude_var'], config['latitude_var']}:
+            continue
+
+        logger.info(f'Gridding variable: {var}')
+        data_vars[var] = (
+            ('lat', 'lon'),
+            _resample(ds[var], swath_def, area_def, (height, width)),
+            ds[var].attrs
+        )
+
+    lons, lats = area_def.get_lonlats()
+    lons, lats = lons[0], lats.T[0]
+
+    new_ds = xr.Dataset(data_vars=data_vars, coords={'lon': ('lon', lons), 'lat': ('lat', lats)}, attrs=ds.attrs)
+
+    chunk_config = {
+        'lat': config['chunks']['latitude'],
+        'lon': config['chunks']['longitude'],
+    }
+
+    logger.info(f'Setting chunk configuration to all variables: {chunk_config}')
+
+    for var in new_ds.data_vars:
+        new_ds[var] = new_ds[var].chunk(chunk_config)
+
+    logger.info(f'Gridded dataset: {new_ds}')
+
+    return _output_dataset(
+        new_ds,
+        output_name,
+        output_format,
+        **output_kwargs
+    )
+
+
+def main(args):
     if args.grid_resolution is None and args.grid_size is None:
         resolution = DEFAULT_GRID_RESOLUTION
     elif args.grid_resolution is not None:
@@ -357,15 +362,77 @@ if __name__ == '__main__':
 
     zarr_kwargs = {'zarr_version': args.zarr_version}
 
-    grid_netcdfs(
-        args.input_url,
-        args.output,
-        args.config,
-        pattern=args.pattern,
-        variables=args.variables,
-        output_extent=args.output_extent,
-        output_grid_resolution=resolution,
-        output_format=args.format,
-        **zarr_kwargs
-    )
+    try:
+        if args.input_url.startswith('s3://'):
+            session = boto3.Session(profile_name=os.getenv('AWS_PROFILE', None))
+            client = session.client('s3')
+            input_stage_dir = stage_s3(args.input_url, client)
+            staging_dirs.append(input_stage_dir)
+            data_paths = glob(os.path.join(input_stage_dir, args.pattern))
+        else:
+            # Local input
+            if os.path.isfile(args.input_url):
+                # Single file
+                data_paths = [args.input_url]
+            else:
+                # Directory with pattern
+                data_paths = glob(os.path.join(args.input_url, args.pattern))
 
+        if len(args.config) == 1:
+            grid_netcdfs(
+                data_paths,
+                args.output,
+                args.config[0],
+                variables=args.variables,
+                output_extent=args.output_extent,
+                output_grid_resolution=resolution,
+                output_format=args.format,
+                **zarr_kwargs
+            )
+        else:
+            gridded_datasets = []
+
+            for config in args.config:
+                logger.info(f'Executing gridding preprocessor for configuration: {config}')
+                gridded_datasets.append(
+                    grid_netcdfs(
+                        data_paths,
+                        args.output,
+                        config,
+                        variables=args.variables,
+                        output_extent=args.output_extent,
+                        output_grid_resolution=resolution,
+                        output_format='xarray',
+                        **zarr_kwargs
+                    )
+                )
+
+            logger.info(f'Finished gridding datasets. Now reducing by method {args.combine}')
+
+            combined_ds = xr.concat(gridded_datasets, dim='grids')
+            func = getattr(combined_ds, args.combine)
+
+            final_ds = func('grids')
+
+            logger.info(f'Combined dataset: {final_ds}')
+
+            _output_dataset(
+                final_ds,
+                args.output,
+                args.format,
+                **zarr_kwargs
+            )
+    finally:
+        for sd in staging_dirs:
+            try:
+                logger.debug(f'Cleaning up staging dir: {sd}')
+                shutil.rmtree(sd)
+            except Exception as e:
+                logger.error(f'Failed to remove staging dir: {sd}: {e}')
+
+
+if __name__ == '__main__':
+    parser = get_parser()
+    args = parser.parse_args()
+
+    main(args)

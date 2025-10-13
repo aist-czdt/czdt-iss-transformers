@@ -1,0 +1,16 @@
+input_groups:
+  - right
+exclude_root: true
+latitude_var: latitude
+longitude_var: longitude
+concat_dim: num_lines
+chunks:
+  latitude: 500
+  longitude: 500
+drop_vars:
+  - geophysical_doppler_miti
+  - latitude_doppler_miti
+  - longitude_doppler_miti
+  - surface_velocity_doppler_miti
+  - time_doppler_miti
+  - time_tai_doppler_miti
