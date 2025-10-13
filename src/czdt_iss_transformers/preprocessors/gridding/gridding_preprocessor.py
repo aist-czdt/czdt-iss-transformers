@@ -57,11 +57,13 @@ def _localize_config(config_url: str, client) -> str:
 
 def _parse_config(config_path: str, client) -> dict:
     schema = yamale.make_schema(SCHEMA_PATH)
-    data = yamale.make_data(_localize_config(config_path, client))
+
+    localized_config = _localize_config(config_path, client)
+    data = yamale.make_data(localized_config)
 
     yamale.validate(schema, data, strict=True)
 
-    with open(config_path, 'r') as f:
+    with open(localized_config, 'r') as f:
         config = yaml.safe_load(f)
 
     return config
