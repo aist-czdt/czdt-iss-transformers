@@ -1,4 +1,4 @@
-name: cf2zarr
+name: czdt-iss-transformers
 channels:
   - conda-forge
   - nodefaults

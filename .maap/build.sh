@@ -11,8 +11,8 @@ pushd "${root_dir}"
 set -e
 
 conda env update -f environment.yaml
-conda list -n cf2zarr
+conda list -n czdt-iss-transformers
 
-conda run -n cf2zarr pip install -e .
+conda run -n czdt-iss-transformers pip install -e .
 
 popd
