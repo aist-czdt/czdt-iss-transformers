@@ -60,7 +60,6 @@ def main(args):
     dataset = open_url(url)
 
     print(dataset)
-    print(dataset.attributes)
 
     lon_rho_np = np.array(dataset['lon_rho'])
     lat_rho_np = np.array(dataset['lat_rho'])
@@ -118,6 +117,14 @@ def main(args):
 
         ds_regridded = regridder(ds_src_2d, keep_attrs=True, skipna=True)
         ds_regridded.attrs['s_rho'] = str(s)
+
+        print(ds_regridded.attrs)
+
+        if 'NAME' in ds_regridded.attrs:
+            # NAME is a reserved attribute in NC4 standards so must be replaced
+            ds_regridded.attrs['name'] = ds_regridded.attrs['NAME']
+            del ds_regridded.attrs['NAME']
+
         print("\n--- Regridded Dataset on WGS84 Grid ---")
         print(ds_regridded)
 
