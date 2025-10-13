@@ -16,10 +16,10 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
 try:
-    from czdt_iss_transformers.util import open_zarr, get_config
+    from czdt_iss_transformers.util import open_zarr, get_config, stage_s3
 except ImportError:
     print('could not import czdt_iss_transformers.util, trying different path', file=sys.stderr)
-    from .util import open_zarr, get_config
+    from .util import open_zarr, get_config, stage_s3
 
 # Configure logging: INFO for basic config, DEBUG for this module  
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
@@ -40,10 +40,12 @@ def convert_cf_to_zarr(
     config_path,
     input_path,
     output_path,
+    zarr=None,
+    zarr_access='mount',
     pattern='*.nc',
     variables=None,
     duration=None,
-    aws_profile=None
+    aws_profile=None,
 ):
     """Convert NetCDF files to Zarr format.
     
@@ -76,10 +78,33 @@ def convert_cf_to_zarr(
     config = get_config(config_path)
     dim = config['dimensions']['time']
 
-    # Determine if input is local or S3
+    aws_session_and_client = None
+
+    if zarr == 'none':
+        zarr = None
+
+    if zarr is not None:
+        aws_session_and_client = setup_aws_session(aws_profile)
+        session, client = aws_session_and_client
+
+        credentials = session.get_credentials().get_frozen_credentials()
+        prev_ds, stage_dir = open_zarr(zarr, zarr_access, client, credentials)
+
+        if stage_dir is not None:
+            staging_dirs.append(stage_dir)
+
+        print('Opened existing zarr dataset')
+        print(prev_ds)
+    else:
+        prev_ds = None
+        print('No existing zarr dataset, starting a new one')
+
+        # Determine if input is local or S3
     if input_path.startswith('s3://'):
         # S3 input - setup AWS session and stage data
-        session, client = setup_aws_session(aws_profile)
+        if aws_session_and_client is None:
+            aws_session_and_client = setup_aws_session(aws_profile)
+        session, client = aws_session_and_client
         input_stage_dir = stage_s3(input_path, client)
         staging_dirs.append(input_stage_dir)
         data_path = os.path.join(input_stage_dir, pattern)
@@ -108,6 +133,9 @@ def convert_cf_to_zarr(
     if variables:
         logger.info(f'Subselecting vars: {variables}')
         ds = ds[variables]
+
+    if prev_ds is not None:
+        ds = xr.concat((prev_ds, ds), dim=dim).sortby(dim)
 
     time_coord = config['coordinates']['time']
 
@@ -178,7 +206,9 @@ def main(args):
         output_path=os.path.join('output', args.output),
         pattern=args.pattern,
         variables=args.variables,
-        duration=args.duration
+        duration=args.duration,
+        zarr=args.zarr,
+        zarr_access=args.zarr_access,
     )
 
 
@@ -199,6 +229,20 @@ def cli_main():
         help='Path to input NetCDF files (local directory/file or S3 URL prefix)'
     )
 
+    parser.add_argument(
+        '-z', '--zarr',
+        required=False,
+        default='none',
+        help='S3 URL of existing zarr data to append to'
+    )
+
+    parser.add_argument(
+        '--zarr-access',
+        required=False,
+        default='stage',
+        choices=['stage', 'mount'],
+        help='stage: Download zarr data from S3 to local filesystem; mount: mount S3 to local filesystem'
+    )
 
     parser.add_argument(
         '-p', '--pattern',
