@@ -120,10 +120,9 @@ def main(args):
 
         print(ds_regridded.attrs)
 
-        if 'NAME' in ds_regridded.attrs:
-            # NAME is a reserved attribute in NC4 standards so must be replaced
-            ds_regridded.attrs['name'] = ds_regridded.attrs['NAME']
-            del ds_regridded.attrs['NAME']
+        if '_NCProperties' in ds_regridded.attrs:
+            # _NCProperties is a reserved attribute in NC4 standards so must be replaced or removed
+            del ds_regridded.attrs['_NCProperties']
 
         print("\n--- Regridded Dataset on WGS84 Grid ---")
         print(ds_regridded)
