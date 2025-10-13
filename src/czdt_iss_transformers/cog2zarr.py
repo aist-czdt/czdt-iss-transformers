@@ -26,7 +26,11 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH = os.path.join(SCRIPT_DIR, 'schema', 'geotiff_schema.yaml')
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
-from .util import stage_s3
+try:
+    from czdt_iss_transformers.util import stage_s3
+except ImportError:
+    print('could not import czdt_iss_transformers.util, trying different path', file=sys.stderr)
+    from .util import stage_s3
 
 DT_UNITS = ['year', 'month', 'day', 'hour', 'minute', 'second', 'microsecond']
 UNIT_STARTS = dict(year=0, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
