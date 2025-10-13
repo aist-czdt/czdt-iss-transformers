@@ -93,11 +93,11 @@ def convert_cf_to_zarr(
         if stage_dir is not None:
             staging_dirs.append(stage_dir)
 
-        print('Opened existing zarr dataset')
-        print(prev_ds)
+        logger.info('Opened existing zarr dataset')
+        logger.info(prev_ds)
     else:
         prev_ds = None
-        print('No existing zarr dataset, starting a new one')
+        logger.info('No existing zarr dataset, starting a new one')
 
         # Determine if input is local or S3
     if input_path.startswith('s3://'):
