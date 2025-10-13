@@ -25,4 +25,6 @@ dependencies:
   - psutil
   - pydap
   - xesmf>=0.7
+  - pyresample
+  - jq
 

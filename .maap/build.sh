@@ -12,4 +12,7 @@ set -e
 
 conda env update -f environment.yaml
 conda list -n czdt-iss-transformers
+
+conda run -n czdt-iss-transformers pip install -e .
+
 popd
