@@ -5,8 +5,8 @@ basedir=$( cd "$(dirname "$0")" ; pwd -P )
 root_dir=$(dirname "${basedir}")
 
 mkdir -p output
-source activate cf2zarr
-python -u "${root_dir}"/src/zarr_concat.py \
+source activate czdt-iss-transformers
+python -u "${root_dir}"/src/czdt_iss_transformers/zarr_concat.py \
   $([ -n "$1" ] && echo $1)\
   --zarr-manifest $2 \
   --zarr-access $3 \

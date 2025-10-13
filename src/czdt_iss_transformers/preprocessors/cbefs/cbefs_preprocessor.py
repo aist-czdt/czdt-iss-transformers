@@ -6,7 +6,12 @@ import xarray as xr
 import cftime
 import xesmf as xe
 import argparse
+from pathlib import Path
 from functools import cache
+import warnings
+from datetime import datetime
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 # Valid 4d variables
@@ -43,9 +48,13 @@ VALID_VARIABLES = [
 
 
 def main(args):
+    start_time = datetime.now()
+
     url = args.url
     resolution = args.resolution
     variables = args.variables
+
+    Path('output').mkdir(exist_ok=True, parents=True)
 
     print(f'Opening CBEFS NetCDF file at {url}')
     dataset = open_url(url)
@@ -73,6 +82,11 @@ def main(args):
     variables_np = {v: np.array(dataset[v]) for v in variables}
 
     print(f'Selected {len(variables_np)} variables')
+
+    print('Masking out values near to FillValue (resolves floating-point issue leading to unmasked pixels)')
+    for v in variables_np:
+        fill_value = np.float32(dataset[v].attributes['_FillValue'])
+        variables_np[v][np.isclose(variables_np[v], fill_value)] = np.nan
 
     s_rho_length = list(variables_np.values())[0].shape[1]
 
@@ -103,6 +117,13 @@ def main(args):
 
         ds_regridded = regridder(ds_src_2d, keep_attrs=True, skipna=True)
         ds_regridded.attrs['s_rho'] = str(s)
+
+        print(ds_regridded.attrs)
+
+        if '_NCProperties' in ds_regridded.attrs:
+            # _NCProperties is a reserved attribute in NC4 standards so must be replaced or removed
+            del ds_regridded.attrs['_NCProperties']
+
         print("\n--- Regridded Dataset on WGS84 Grid ---")
         print(ds_regridded)
 
@@ -112,6 +133,8 @@ def main(args):
         for i, t in enumerate(ds_regridded.time.values):
             print(f'Outputting gridded file to {output_filename}_{i}')
             ds_regridded.isel(time=[i]).to_netcdf(f"{output_filename}_{i}.nc")
+
+        print(f'CBEFS preprocessor finished in {datetime.now() - start_time}')
 
 
 if __name__ == '__main__':
