@@ -11,7 +11,7 @@ echo $root_dir
 
 echo "Running gridding preprocessor..."
 
-source activate cf2zarr
+source activate czdt-iss-transformers
 
 # Check if _job.json exists
 if [[ ! -f "_job.json" ]]; then
