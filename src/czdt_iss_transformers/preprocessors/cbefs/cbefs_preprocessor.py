@@ -60,6 +60,7 @@ def main(args):
     dataset = open_url(url)
 
     print(dataset)
+    print(dataset.attributes)
 
     lon_rho_np = np.array(dataset['lon_rho'])
     lat_rho_np = np.array(dataset['lat_rho'])
