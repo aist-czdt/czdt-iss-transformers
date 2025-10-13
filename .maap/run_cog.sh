@@ -5,7 +5,7 @@ basedir=$( cd "$(dirname "$0")" ; pwd -P )
 root_dir=$(dirname "${basedir}")
 
 mkdir -p output
-source activate cf2zarr
+source activate czdt-iss-transformers
 python "${root_dir}"/src/czdt_iss_transformers/zarr2cog.py \
   $1 \
   --zarr-access $2 \

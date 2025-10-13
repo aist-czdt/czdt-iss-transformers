@@ -6,7 +6,7 @@ root_dir=$(dirname "${basedir}")
 
 CONFIG_FILE=$(ls -d input/*)
 mkdir -p output
-source activate cf2zarr
+source activate czdt-iss-transformers
 python -u "${root_dir}"/src/czdt_iss_transformers/cog2zarr.py \
   --input-s3 $1 \
   --config $CONFIG_FILE \
