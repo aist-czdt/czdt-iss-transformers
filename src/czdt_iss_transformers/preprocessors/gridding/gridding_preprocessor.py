@@ -439,6 +439,13 @@ def main(args):
 
             final_ds = func('grids')
 
+            
+            # Temporary workaround for making dataset compatible with sample_{pace/swot}_cfg.yaml 
+            logger.info('Attaching dummy timestamp.')
+            time = np.array([np.datetime64('1970-01-01')])
+            final_ds = final_ds.expand_dims(time=1).assign_coords(time=time)
+            
+
             logger.info(f'Combined dataset: {final_ds}')
 
             _output_dataset(
