@@ -1,10 +1,14 @@
 input_groups:
   - navigation_data
   - geophysical_data
+  - scan_line_attributes
 exclude_root: true
 latitude_var: latitude
 longitude_var: longitude
+time_var: time
+time_reduce: max
 concat_dim: number_of_lines
 chunks:
   latitude: 500
   longitude: 500
+  time: 1

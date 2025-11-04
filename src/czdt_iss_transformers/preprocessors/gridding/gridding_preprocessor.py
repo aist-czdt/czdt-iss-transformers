@@ -308,8 +308,8 @@ def grid_netcdfs(
         variables = []
 
     if variables:
-        # Ensure lat and lon remain
-        variables.extend([config['latitude_var'], config['longitude_var']])
+        # Ensure lat lon and time remain
+        variables.extend([config['latitude_var'], config['longitude_var'], config['time_var']])
         variables = list(set(variables))
 
         logger.info(f'Subselecting vars: {variables}')
@@ -342,7 +342,7 @@ def grid_netcdfs(
     data_vars = {}
 
     for var in ds.data_vars:
-        if var in {config['longitude_var'], config['latitude_var']}:
+        if var in {config['longitude_var'], config['latitude_var'], config['time_var']}:
             continue
 
         logger.info(f'Gridding variable: {var}')
@@ -355,11 +355,18 @@ def grid_netcdfs(
     lons, lats = area_def.get_lonlats()
     lons, lats = lons[0], lats.T[0]
 
+    time_var = ds[config['time_var']]
+    func = getattr(time_var, config.get('time_reduce', 'max'))
+
+    timestamp = func().data.reshape((1,))
+
     new_ds = xr.Dataset(data_vars=data_vars, coords={'lon': ('lon', lons), 'lat': ('lat', lats)}, attrs=ds.attrs)
+    new_ds = new_ds.expand_dims(time=1).assign_coords(time=timestamp)
 
     chunk_config = {
         'lat': config['chunks']['latitude'],
         'lon': config['chunks']['longitude'],
+        'time': config['chunks']['time'],
     }
 
     logger.info(f'Setting chunk configuration to all variables: {chunk_config}')
@@ -434,10 +441,17 @@ def main(args):
 
             logger.info(f'Finished gridding datasets. Now reducing by method {args.combine}')
 
-            combined_ds = xr.concat(gridded_datasets, dim='grids')
-            func = getattr(combined_ds, args.combine)
+            combined_ds = xr.concat(gridded_datasets, dim='grids', join='outer')
+            time_da = combined_ds.time
 
-            final_ds = func('grids')
+            agg_func = getattr(combined_ds, args.combine)
+            time_agg_func = getattr(time_da, args.combine)
+
+            final_timestamp = time_agg_func().data.reshape((1,))
+            final_ds = agg_func(('grids', 'time'))
+
+            # Attach final timestamp
+            final_ds = final_ds.expand_dims(time=1).assign_coords(time=final_timestamp)
 
             logger.info(f'Combined dataset: {final_ds}')
 
