@@ -3,6 +3,7 @@ import logging
 import os
 import shutil
 import tempfile
+import warnings
 from glob import glob
 from pathlib import Path
 from sys import stderr
@@ -75,7 +76,10 @@ def _open_scene(path: str, config: dict) -> xr.Dataset:
 
     logger.info(f'Opening NetCDF at {path}')
 
-    return xr.merge([xr.open_dataset(path, group=g).drop_vars(config.get('drop_vars', [])) for g in groups])
+    with warnings.catch_warnings(category=FutureWarning, action='ignore'):
+        scene_ds = xr.merge([xr.open_dataset(path, group=g).drop_vars(config.get('drop_vars', [])) for g in groups])
+
+    return scene_ds
 
 
 def _resample(src_data, src_def, target_def, expected_shape):
