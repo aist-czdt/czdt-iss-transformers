@@ -3,10 +3,13 @@ input_groups:
 exclude_root: true
 latitude_var: latitude
 longitude_var: longitude
+time_var: time
+time_reduce: max
 concat_dim: num_lines
 chunks:
   latitude: 500
   longitude: 500
+  time: 1
 drop_vars:
   - geophysical_doppler_miti
   - latitude_doppler_miti
