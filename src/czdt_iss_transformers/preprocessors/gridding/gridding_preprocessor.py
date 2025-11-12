@@ -319,6 +319,16 @@ def grid_netcdfs(
         logger.info(f'Subselecting vars: {variables}')
         ds = ds[variables]
 
+    if config.get('correct_longitude', None) == 'antimeridian':
+        logger.info(f'Correcting longitude coordinate from [0,360] '
+                    f'where 0=antimeridian to [-180, 180] where 0=meridian')
+        ds[config['longitude_var']] = ds[config['longitude_var']] - 180
+    elif config.get('correct_longitude', None) == 'meridian':
+        logger.info(f'Correcting longitude coordinate from [0,360] where 0=meridian to [-180, 180] where 0=meridian')
+        ds[config['longitude_var']] = xr.where(
+            ds[config['longitude_var']] >= 180, ds[config['longitude_var']] - 360, ds[config['longitude_var']]
+        )
+
     swath_def = SwathDefinition(
         lons=ds[config['longitude_var']].data,
         lats=ds[config['latitude_var']].data,

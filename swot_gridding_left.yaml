@@ -4,6 +4,7 @@ exclude_root: true
 latitude_var: latitude
 longitude_var: longitude
 time_var: time
+correct_longitude: meridian
 time_reduce: max
 concat_dim: num_lines
 chunks:
