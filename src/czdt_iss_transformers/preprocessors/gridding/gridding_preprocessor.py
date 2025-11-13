@@ -17,6 +17,8 @@ import yamale
 import yaml
 from numcodecs.blosc import Blosc as BloscZ2
 from pyresample import kd_tree, geometry, SwathDefinition
+from pyresample.bilinear import XArrayBilinearResampler
+from pyresample.ewa import DaskEWAResampler
 from zarr.codecs import BloscCodec as Blosc
 
 try:
@@ -82,22 +84,129 @@ def _open_scene(path: str, config: dict) -> xr.Dataset:
     return scene_ds
 
 
-def _resample(src_data, src_def, target_def, expected_shape):
-    masked_src = np.ma.masked_invalid(src_data)
+def _resample(
+        src_data,
+        src_def,
+        target_def,
+        expected_shape,
+        method='nearest',
+        **kwargs
+):
+    if method == 'nearest':
+        masked_src = np.ma.masked_invalid(src_data)
 
-    # TODO: Should roi be adjustable? How best to do so?
-    resample_result = kd_tree.resample_nearest(src_def, masked_src, target_def, radius_of_influence=50000,
-                                               epsilon=0.5, fill_value=None)
+        resample_result = kd_tree.resample_nearest(
+            src_def,
+            masked_src,
+            target_def,
+            radius_of_influence=kwargs.get('roi', 50000),
+            epsilon=kwargs.get('epsilon', 0.5),
+            fill_value=None,
+            reduce_data=kwargs.get('reduce_data', True),
+        )
 
-    unmasked_result = resample_result.filled(np.nan)
+        unmasked_result = resample_result.filled(np.nan)
 
-    if unmasked_result.shape != expected_shape:
-        unmasked_result = unmasked_result.T
         if unmasked_result.shape != expected_shape:
-            raise RuntimeError(f'Reprojected data (nor its transposition) does not match expected shape: '
-                               f'{unmasked_result.shape} != {expected_shape}')
+            unmasked_result = unmasked_result.T
+            if unmasked_result.shape != expected_shape:
+                raise RuntimeError(f'Reprojected data (nor its transposition) does not match expected shape: '
+                                   f'{unmasked_result.shape} != {expected_shape}')
 
-    return unmasked_result
+        return unmasked_result
+    elif method == 'bilinear':
+        x_dim = kwargs.get('x_dim')
+        y_dim = kwargs.get('y_dim')
+
+        if x_dim is None:
+            raise ValueError(f'x_dim kwarg must be provided for bilinear method')
+
+        if y_dim is None:
+            raise ValueError(f'y_dim kwarg must be provided for bilinear method')
+
+        neighbors = kwargs.get('neighbors', 32)
+        if neighbors is None:
+            neighbors = 32
+
+        resampler = XArrayBilinearResampler(
+            src_def, target_def,
+            kwargs.get('roi', 50000),
+            epsilon=kwargs.get('epsilon', 0.5),
+            reduce_data=kwargs.get('reduce_data', True),
+            neighbours=neighbors
+        )
+
+        with warnings.catch_warnings(action='ignore'):
+            ds = src_data.rename({x_dim: 'x', y_dim: 'y'})
+            result = resampler.resample(ds)
+
+            result = result.data.compute()
+
+        if result.shape != expected_shape:
+            result = result.T
+            if result.shape != expected_shape:
+                raise RuntimeError(f'Reprojected data (nor its transposition) does not match expected shape: '
+                                   f'{result.shape} != {expected_shape}')
+
+        return result
+    elif method == 'gauss':
+        roi = kwargs.get('roi')
+        sigmas = kwargs.get('sigmas')
+
+        if roi is None:
+            raise ValueError(f'roi kwarg must be provided for gauss method')
+
+        if sigmas is None:
+            raise ValueError(f'sigmas kwarg must be provided for gauss method')
+
+        neighbors = kwargs.get('neighbors', 8)
+        if neighbors is None:
+            neighbors = 8
+
+        masked_src = np.ma.masked_invalid(src_data)
+
+        resample_result = kd_tree.resample_gauss(
+            src_def,
+            masked_src,
+            target_def,
+            radius_of_influence=roi,
+            sigmas=sigmas,
+            neighbours=neighbors,
+            epsilon=kwargs.get('epsilon', 0),
+            fill_value=None,
+            reduce_data=kwargs.get('reduce_data', True),
+        )
+
+        unmasked_result = resample_result.filled(np.nan)
+
+        if unmasked_result.shape != expected_shape:
+            unmasked_result = unmasked_result.T
+            if unmasked_result.shape != expected_shape:
+                raise RuntimeError(f'Reprojected data (nor its transposition) does not match expected shape: '
+                                   f'{unmasked_result.shape} != {expected_shape}')
+
+        return unmasked_result
+    elif method == 'ewa':
+        resampler = DaskEWAResampler(src_def, target_def)
+
+        rows_per_scan = kwargs.get('rows_per_scan', 0)
+
+        if rows_per_scan is None:
+            rows_per_scan = 0
+        elif isinstance(rows_per_scan, str):
+            rows_per_scan = src_data.sizes[rows_per_scan]
+
+        result = resampler.resample(src_data.data, rows_per_scan=rows_per_scan)
+
+        if result.shape != expected_shape:
+            result = result.T
+            if result.shape != expected_shape:
+                raise RuntimeError(f'Reprojected data (nor its transposition) does not match expected shape: '
+                                   f'{result.shape} != {expected_shape}')
+
+        return result
+    else:
+        raise ValueError(f'Unsupported method: {method}')
 
 
 def _output_dataset(
@@ -353,6 +462,14 @@ def grid_netcdfs(
     logger.info(f'Source definition: {swath_def}')
     logger.info(f'Target definition: {area_def}')
 
+    resample_method = config.get('resample_method', 'nearest')
+    resample_kwargs = config.get('resample_kwargs', {})
+
+    if resample_kwargs is None:
+        resample_kwargs = {}
+
+    logger.info(f'Using resampling method {resample_method} with params {resample_kwargs}')
+
     data_vars = {}
 
     for var in ds.data_vars:
@@ -362,7 +479,14 @@ def grid_netcdfs(
         logger.info(f'Gridding variable: {var}')
         data_vars[var] = (
             ('lat', 'lon'),
-            _resample(ds[var], swath_def, area_def, (height, width)),
+            _resample(
+                ds[var],
+                swath_def,
+                area_def,
+                (height, width),
+                method=resample_method,
+                **resample_kwargs
+            ),
             ds[var].attrs
         )
 

@@ -7,6 +7,41 @@ time_var: time
 correct_longitude: meridian
 time_reduce: max
 concat_dim: num_lines
+
+#resample_method: nearest
+#resample_kwargs:
+#  roi: 500    # Optional
+#  epsilon: 0.5  # Optional
+#  reduce_data: true  # Optional
+
+
+#resample_method: bilinear
+#resample_kwargs:
+#  x_dim: num_pixels
+#  y_dim: num_lines
+#  roi: 500   # Optional
+#  epsilon: 0.5 # Optional
+#  neighbors: ~ # Optional
+#  reduce_data: true # Optional
+
+
+resample_method: gauss
+resample_kwargs:
+  roi: 500
+  sigmas: 250
+  epsilon: 0.5 # Optional
+  neighbors: ~ # Optional
+  reduce_data: true # Optional
+
+
+#resample_method: ewa
+#resample_kwargs:
+##  rows_per_scan: 0  # int for fixed
+#  rows_per_scan: num_pixels # string for dim len
+
+
+
+
 chunks:
   latitude: 500
   longitude: 500
