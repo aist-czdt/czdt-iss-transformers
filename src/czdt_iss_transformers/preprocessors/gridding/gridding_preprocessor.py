@@ -548,6 +548,9 @@ def main(args):
                 # Directory with pattern
                 data_paths = glob(os.path.join(args.input_url, args.pattern))
 
+        if len(data_paths) == 0:
+            raise ValueError(f'No data files found for {args.input_url}')
+
         if len(args.config) == 1:
             grid_netcdfs(
                 data_paths,
