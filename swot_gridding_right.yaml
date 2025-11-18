@@ -14,7 +14,6 @@ concat_dim: num_lines
 #  epsilon: 0.5  # Optional
 #  reduce_data: true  # Optional
 
-
 #resample_method: bilinear
 #resample_kwargs:
 #  x_dim: num_pixels
@@ -24,7 +23,6 @@ concat_dim: num_lines
 #  neighbors: ~ # Optional
 #  reduce_data: true # Optional
 
-
 resample_method: gauss
 resample_kwargs:
   roi: 500
@@ -33,14 +31,10 @@ resample_kwargs:
   neighbors: ~ # Optional
   reduce_data: true # Optional
 
-
 #resample_method: ewa
 #resample_kwargs:
 ##  rows_per_scan: 0  # int for fixed
 #  rows_per_scan: num_pixels # string for dim len
-
-
-
 
 chunks:
   latitude: 500
