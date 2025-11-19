@@ -468,7 +468,7 @@ def grid_netcdfs(
     if resample_kwargs is None:
         resample_kwargs = {}
 
-    logger.info(f'Using resampling method {resample_method} with params {resample_kwargs}')
+    logger.info(f'Using resampling method "{resample_method}" with user-defined params: {resample_kwargs}')
 
     data_vars = {}
 
