@@ -104,6 +104,10 @@ def main(args):
             print(f'Dropped {idx:,} time steps. New dataset duration: '
                   f'{pd.Timedelta((ds[time_coord][-1] - ds[time_coord][0]).data.item())}')
 
+    print('Forcing ascending coordinates')
+    ds = ds.sortby(config['coordinates']['latitude'], config['coordinates']['longitude'])
+    print(ds)
+
     cb_subset = {
         config['coordinates']['latitude']: slice(36.405, 43.005),
         config['coordinates']['longitude']: slice(-80.595, -74.495),
