@@ -112,7 +112,11 @@ def main(args):
             ds = ds.isel(time=slice(idx, None))
 
             logger.info(f'Dropped {idx:,} time steps. New dataset duration: '
-                  f'{pd.Timedelta((ds[time_coord][-1] - ds[time_coord][0]).data.item())}')
+                        f'{pd.Timedelta((ds[time_coord][-1] - ds[time_coord][0]).data.item())}')
+
+    print('Forcing ascending coordinates')
+    ds = ds.sortby(config['coordinates']['latitude'], config['coordinates']['longitude'])
+    print(ds)
 
     chunk_config = {config['dimensions'][d]: config['chunks'][d] for d in config['chunks']}
 
