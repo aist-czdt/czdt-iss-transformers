@@ -10,6 +10,8 @@ from pathlib import Path
 from functools import cache
 import warnings
 from datetime import datetime
+import time
+from ssl import SSLError
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -47,6 +49,42 @@ VALID_VARIABLES = [
 # TODO: There are some vars that don't have s_rho (& also time) dimensions. Do we want to support them too?
 
 
+def _open_url_with_retry(url, max_retries=5, backoff_factor=2, initial_delay=1):
+    """
+    Open a DAP URL with exponential backoff retry logic for connection errors.
+
+    Args:
+        url: The URL to open
+        max_retries: Maximum number of retry attempts (default: 5)
+        backoff_factor: Multiplier for exponential backoff (default: 2)
+        initial_delay: Initial delay in seconds before first retry (default: 1)
+
+    Returns:
+        The opened dataset
+
+    Raises:
+        Exception: If all retries are exhausted
+    """
+    delay = initial_delay
+    last_exception = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            return open_url(url)
+        except (SSLError, ConnectionError, TimeoutError, OSError) as e:
+            last_exception = e
+            if attempt < max_retries:
+                print(f'Connection error on attempt {attempt + 1}/{max_retries + 1}: {e}')
+                print(f'Retrying in {delay} seconds...')
+                time.sleep(delay)
+                delay *= backoff_factor
+            else:
+                print(f'Failed after {max_retries + 1} attempts')
+                raise
+
+    raise last_exception
+
+
 def main(args):
     start_time = datetime.now()
 
@@ -57,7 +95,7 @@ def main(args):
     Path('output').mkdir(exist_ok=True, parents=True)
 
     print(f'Opening CBEFS NetCDF file at {url}')
-    dataset = open_url(url)
+    dataset = _open_url_with_retry(url, max_retries=5, backoff_factor=2)
 
     print(dataset)
 
