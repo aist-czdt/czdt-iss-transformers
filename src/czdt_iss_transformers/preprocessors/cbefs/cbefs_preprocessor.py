@@ -161,17 +161,15 @@ def main(args):
         _download_nc_with_retry(url, local_nc_path, max_retries=5, backoff_factor=2)
 
         print(f'Opening local NetCDF file at {local_nc_path}')
-        dataset = xr.open_dataset(local_nc_path)
+        dataset = xr.open_dataset(local_nc_path, decode_times=True)
 
         print(dataset)
 
         lon_rho_np = np.array(dataset['lon_rho'])
         lat_rho_np = np.array(dataset['lat_rho'])
-        ocean_time_np = np.array(dataset['ocean_time'])
 
-        time_units = dataset['ocean_time'].attrs.get('units', 'seconds since 2009-01-01 00:00:00')
-        calendar = dataset['ocean_time'].attrs.get('calendar', 'proleptic_gregorian')
-        time_dt = cftime.num2date(ocean_time_np, units=time_units, calendar=calendar)
+        # Use xarray's decoded time coordinate directly instead of manual cftime conversion
+        time_coord = dataset['ocean_time']
 
         target_lon = np.arange(lon_rho_np.min(), lon_rho_np.max(), resolution)
         target_lat = np.arange(lat_rho_np.min(), lat_rho_np.max(), resolution)
@@ -189,8 +187,9 @@ def main(args):
 
         print('Masking out values near to FillValue (resolves floating-point issue leading to unmasked pixels)')
         for v in variables_np:
-            fill_value = np.float32(dataset[v].attrs['_FillValue'])
-            variables_np[v][np.isclose(variables_np[v], fill_value)] = np.nan
+            if '_FillValue' in dataset[v].attrs:
+                fill_value = np.float32(dataset[v].attrs['_FillValue'])
+                variables_np[v][np.isclose(variables_np[v], fill_value)] = np.nan
 
         s_rho_length = list(variables_np.values())[0].shape[1]
 
@@ -207,7 +206,7 @@ def main(args):
                 coords={
                     "lon": (("eta_rho", "xi_rho"), lon_rho_np),
                     "lat": (("eta_rho", "xi_rho"), lat_rho_np),
-                    "time": time_dt,
+                    "time": ("time", time_coord.values, time_coord.attrs),
                 },
                 attrs=dataset.attrs
             )
