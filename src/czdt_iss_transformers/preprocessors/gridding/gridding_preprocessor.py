@@ -92,6 +92,7 @@ def _resample(
         method='nearest',
         **kwargs
 ):
+    logger.debug(f'Using resample method {method}, src shape: {src_data.shape}, expected shape: {expected_shape}')
     if method == 'nearest':
         masked_src = np.ma.masked_invalid(src_data)
 
@@ -107,8 +108,11 @@ def _resample(
 
         unmasked_result = resample_result.filled(np.nan)
 
+        logger.debug(f'resampled shape: {unmasked_result.shape}')
+
         if unmasked_result.shape != expected_shape:
             unmasked_result = unmasked_result.T
+            logger.debug(f'transposed resampled data shape: {unmasked_result.shape}')
             if unmasked_result.shape != expected_shape:
                 raise RuntimeError(f'Reprojected data (nor its transposition) does not match expected shape: '
                                    f'{unmasked_result.shape} != {expected_shape}')
@@ -142,8 +146,11 @@ def _resample(
 
             result = result.data.compute()
 
+        logger.debug(f'resampled shape: {result.shape}')
+
         if result.shape != expected_shape:
             result = result.T
+            logger.debug(f'transposed resampled data shape: {result.shape}')
             if result.shape != expected_shape:
                 raise RuntimeError(f'Reprojected data (nor its transposition) does not match expected shape: '
                                    f'{result.shape} != {expected_shape}')
@@ -179,8 +186,11 @@ def _resample(
 
         unmasked_result = resample_result.filled(np.nan)
 
+        logger.debug(f'resampled shape: {unmasked_result.shape}')
+
         if unmasked_result.shape != expected_shape:
             unmasked_result = unmasked_result.T
+            logger.debug(f'transposed resampled data shape: {unmasked_result.shape}')
             if unmasked_result.shape != expected_shape:
                 raise RuntimeError(f'Reprojected data (nor its transposition) does not match expected shape: '
                                    f'{unmasked_result.shape} != {expected_shape}')
@@ -198,8 +208,11 @@ def _resample(
 
         result = resampler.resample(src_data.data, rows_per_scan=rows_per_scan)
 
+        logger.debug(f'resampled shape: {result.shape}')
+
         if result.shape != expected_shape:
             result = result.T
+            logger.debug(f'transposed resampled data shape: {result.shape}')
             if result.shape != expected_shape:
                 raise RuntimeError(f'Reprojected data (nor its transposition) does not match expected shape: '
                                    f'{result.shape} != {expected_shape}')
@@ -438,6 +451,8 @@ def grid_netcdfs(
             ds[config['longitude_var']] >= 180, ds[config['longitude_var']] - 360, ds[config['longitude_var']]
         )
 
+    logger.info(f'Preprocessed input dataset: {ds}')
+
     swath_def = SwathDefinition(
         lons=ds[config['longitude_var']].data,
         lats=ds[config['latitude_var']].data,
@@ -477,6 +492,7 @@ def grid_netcdfs(
             continue
 
         logger.info(f'Gridding variable: {var}')
+        logger.debug(ds[var])
         data_vars[var] = (
             ('lat', 'lon'),
             _resample(
