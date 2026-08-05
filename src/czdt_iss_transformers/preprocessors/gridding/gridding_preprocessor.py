@@ -5,6 +5,7 @@ import shutil
 import tempfile
 import warnings
 from glob import glob
+from itertools import chain
 from pathlib import Path
 from sys import stderr
 from typing import Tuple, Union, Literal, List
@@ -38,6 +39,11 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH = os.path.join(SCRIPT_DIR, 'schema', 'gridding_config_schema.yaml')
 
 staging_dirs = []
+
+
+# TODO: There should be a better way to do this, but these aren't scaling when copying over so let's just drop them
+#  for now since these ncs are internal and these attrs are messing up viz
+DROP_ATTRS = ['valid_min', 'valid_max']
 
 
 def _localize_config(config_url: str, client) -> str:
@@ -301,6 +307,34 @@ def get_parser():
         help='Variables to grid. Supports multiple values and comma-separated values.'
     )
 
+    def _variable_subselections(v):
+        print(v)
+
+        sels = []
+
+        for v_sel in v.split(','):
+            fields = v_sel.split(':')
+
+            if len(fields) == 3:
+                sels.append((fields[0], fields[1], fields[2], None))
+            elif len(fields) == 4:
+                sels.append(tuple(fields))
+
+            if sels[-1][3] not in {None, 'nearest', 'pad', 'ffill', 'backfill', 'bfill', 'isel'}:
+                raise argparse.ArgumentTypeError(f'Invalid selection method: {sels[-1][3]}')
+
+        return sels
+
+    parser.add_argument(
+        '--variable-subselections',
+        required=False,
+        nargs='*',
+        type=_variable_subselections,
+        help='Subselections of provided variables. Supports multiple values and comma-separated values with the format '
+             '<variable_name>:<sel_coordinate>:<sel_value>[:<sel_method>], where sel_method is one of the method '
+             'kwargs in the xarray.DataArray.sel method or "isel" to use xarray.DataArray.isel'
+    )
+
     def _extent_type(s):
         parts = s.split(',')
 
@@ -393,6 +427,7 @@ def grid_netcdfs(
     output_name: str,
     config_path: str,
     variables: Union[List[str], str] = None,
+    variable_subselections: List[Tuple[str, str, float, Union[str, None]]] = None,
     output_extent: Tuple[float, float, float, float] = DEFAULT_EXTENT,
     output_grid_resolution: Union[float, Tuple[int, int]] = DEFAULT_GRID_RESOLUTION,
     output_format: Literal['netcdf', 'zarr', 'xarray'] = 'netcdf',
@@ -418,6 +453,15 @@ def grid_netcdfs(
         else:
             flat_variables.append(v)
     variables = flat_variables
+
+    subselections = {}
+
+    if variable_subselections is not None:
+        for var_name, sel_dim, sel_value, sel_method in variable_subselections:
+            if var_name not in subselections:
+                subselections[var_name] = []
+
+            subselections[var_name].append((sel_dim, sel_value, sel_method))
 
     input_datasets = [_open_scene(path, config) for path in input_paths]
 
@@ -459,8 +503,8 @@ def grid_netcdfs(
     )
 
     if isinstance(output_grid_resolution, float):
-        height = int(360 / output_grid_resolution)
-        width = int(180 / output_grid_resolution)
+        height = int(180 / output_grid_resolution)
+        width = int(360 / output_grid_resolution)
     else:
         width, height = output_grid_resolution
 
@@ -491,20 +535,73 @@ def grid_netcdfs(
         if var in {config['longitude_var'], config['latitude_var'], config['time_var']}:
             continue
 
+        src_var_data = ds[var]
+
         logger.info(f'Gridding variable: {var}')
-        logger.debug(ds[var])
-        data_vars[var] = (
-            ('lat', 'lon'),
-            _resample(
-                ds[var],
+        logger.debug(src_var_data)
+
+        if var in subselections:
+            for sel_dim, sel_value, sel_method in subselections[str(var)]:
+                if sel_method == 'isel':
+                    new_var_name = f'{var}_{sel_dim}_i_{sel_value}'
+                    sub_var_data = src_var_data.isel({sel_dim: sel_value})
+                else:
+                    new_var_name = f'{var}_{sel_dim}_{sel_value}'
+                    sub_var_data = src_var_data.sel({sel_dim: sel_value}, method=sel_method)
+
+                logger.info(f'Subselected variable {var} along dimension {sel_dim} with value {sel_value} and method '
+                            f'{sel_method}: {sub_var_data}')
+
+                sub_var_data.to_netcdf('output/debug.nc')
+
+                resampled_data = _resample(
+                    sub_var_data,
+                    swath_def,
+                    area_def,
+                    (height, width),
+                    method=resample_method,
+                    **resample_kwargs
+                )
+
+                nan_pixel_count = np.count_nonzero(np.isnan(resampled_data))
+                total_pixel_count = resampled_data.flatten().shape[0]
+
+                logger.info(f'Valid pixel count: {total_pixel_count - nan_pixel_count:,}/{total_pixel_count:,} '
+                            f'({(total_pixel_count - nan_pixel_count) * 100 / total_pixel_count:0.2f}%) '
+                            f'(NaN count: {nan_pixel_count:,})')
+
+                if new_var_name in data_vars:
+                    logger.warning(f'Subselected variable name has been used before. Data is being overwritten!')
+
+                data_vars[new_var_name] = (
+                    ('lat', 'lon'),
+                    resampled_data,
+                    {var: val for var, val in src_var_data.attrs.items() if var not in DROP_ATTRS}
+                )
+
+                logger.info(f'Added subselected variable to dataset as {new_var_name}')
+        else:
+            resampled_data = _resample(
+                src_var_data,
                 swath_def,
                 area_def,
                 (height, width),
                 method=resample_method,
                 **resample_kwargs
-            ),
-            ds[var].attrs
-        )
+            )
+
+            nan_pixel_count = np.count_nonzero(np.isnan(resampled_data))
+            total_pixel_count = resampled_data.flatten().shape[0]
+
+            logger.info(f'Valid pixel count: {total_pixel_count - nan_pixel_count:,}/{total_pixel_count:,} '
+                        f'({(total_pixel_count - nan_pixel_count) * 100 / total_pixel_count:0.2f}%) '
+                        f'(NaN count: {nan_pixel_count:,})')
+
+            data_vars[var] = (
+                ('lat', 'lon'),
+                resampled_data,
+                {var: val for var, val in src_var_data.attrs.items() if var not in DROP_ATTRS}
+            )
 
     lons, lats = area_def.get_lonlats()
     lons, lats = lons[0], lats.T[0]
@@ -528,6 +625,8 @@ def grid_netcdfs(
     for var in new_ds.data_vars:
         new_ds[var] = new_ds[var].chunk(chunk_config)
 
+    new_ds = new_ds.sortby(['lat', 'lon'])
+
     logger.info(f'Gridded dataset: {new_ds}')
 
     return _output_dataset(
@@ -547,6 +646,9 @@ def main(args):
         resolution = args.grid_size
 
     zarr_kwargs = {'zarr_version': args.zarr_version}
+
+    if args.variable_subselections is not None:
+        args.variable_subselections = list(chain.from_iterable(args.variable_subselections))
 
     try:
         if args.input_url.startswith('s3://'):
@@ -573,6 +675,7 @@ def main(args):
                 args.output,
                 args.config[0],
                 variables=args.variables,
+                variable_subselections=args.variable_subselections,
                 output_extent=args.output_extent,
                 output_grid_resolution=resolution,
                 output_format=args.format,
@@ -589,6 +692,7 @@ def main(args):
                         args.output,
                         config,
                         variables=args.variables,
+                        variable_subselections=args.variable_subselections,
                         output_extent=args.output_extent,
                         output_grid_resolution=resolution,
                         output_format='xarray',

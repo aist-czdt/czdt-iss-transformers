@@ -25,6 +25,7 @@ config=$(jq -r '.params.config // empty' _job.json)
 output=$(jq -r '.params.output // empty' _job.json)
 pattern=$(jq -r '.params.pattern // empty' _job.json)
 variables=$(jq -r '.params.variables // "*"' _job.json)
+variable_subsels=$(jq -r '.params.variable_subselections // "*"' _job.json)
 output_extent=$(jq -r '.params.output_extent // empty' _job.json)
 grid_resolution=$(jq -r '.params.grid_resolution // empty' _job.json)
 grid_size_lon=$(jq -r '.params.grid_size_lon // empty' _job.json)
@@ -62,6 +63,7 @@ echo "config: ${config}"
 echo "output: ${output}"
 echo "pattern: ${pattern}"
 echo "variables: ${variables}"
+echo "variable_subselections: ${variable_subsels}"
 echo "output_extent: ${output_extent}"
 echo "grid_resolution: ${grid_resolution}"
 echo "grid_size_lon: ${grid_size_lon}"
@@ -96,6 +98,12 @@ fi
 if [[ -n "${variables}" ]]; then
   args+=(
     --variables "${variables}"
+  )
+fi
+
+if [[ -n "${variable_subsels}" ]]; then
+  args+=(
+    --variable-subselections "${variable_subsels}"
   )
 fi
 
