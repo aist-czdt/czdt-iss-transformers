@@ -552,8 +552,6 @@ def grid_netcdfs(
                 logger.info(f'Subselected variable {var} along dimension {sel_dim} with value {sel_value} and method '
                             f'{sel_method}: {sub_var_data}')
 
-                sub_var_data.to_netcdf('output/debug.nc')
-
                 resampled_data = _resample(
                     sub_var_data,
                     swath_def,
