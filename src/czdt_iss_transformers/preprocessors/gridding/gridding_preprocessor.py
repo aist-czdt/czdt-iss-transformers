@@ -735,4 +735,25 @@ if __name__ == '__main__':
     parser = get_parser()
     args = parser.parse_args()
 
-    main(args)
+    try:
+        main(args)
+    finally:
+        import json
+        import platform
+        import resource
+
+        rusage_self = resource.getrusage(resource.RUSAGE_SELF)
+        rusage_children = resource.getrusage(resource.RUSAGE_CHILDREN)
+
+        mem_div_exp = 3 if platform.system() == 'Darwin' else 2
+
+        metrics = {
+            'os.cpu.seconds.sys': rusage_self.ru_stime + rusage_children.ru_stime,
+            'os.cpu.seconds.user': rusage_self.ru_utime + rusage_children.ru_utime,
+            'os.filesystem.reads': rusage_self.ru_inblock + rusage_children.ru_inblock,
+            'os.filesystem.writes': rusage_self.ru_oublock + rusage_children.ru_oublock,
+            'os.max_rss_gb.main_process': rusage_self.ru_maxrss / 1024 ** mem_div_exp,
+            'os.max_rss_gb.largest_child_process': rusage_children.ru_maxrss / 1024 ** mem_div_exp,
+        }
+
+        logger.info(json.dumps(metrics))
