@@ -3,6 +3,7 @@ import logging
 import os
 import shutil
 import sys
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 from pathlib import Path
 from typing import Tuple
@@ -106,7 +107,7 @@ def s3_to_https(s3_url):
     return https_url
 
 
-def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collection_id, zarr_url):
+def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collection_id, zarr_url, source=None):
     """Create STAC Item from COG file metadata.
     
     Args:
@@ -116,6 +117,7 @@ def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collec
         global_attrs (dict): Global attributes from Zarr dataset
         collection_id (str): Collection ID to reference
         zarr_url (str): Path to the ZARR folder
+        source (str): Source granule ID for this COG
         
     Returns:
         pystac.Item: STAC item object
@@ -123,13 +125,20 @@ def create_stac_item_loc(cog_path, datetime_obj, var_attrs, global_attrs, collec
     
     # Generate item ID from filename
     item_id = Path(cog_path).stem
+
+    props = {
+        'ProductionDateTime': datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y-%m-%dT%H:%M:%SZ'),
+    }
+
+    if source:
+        props['SourceGranule'] = source
     
     # Create STAC item
     item = create_stac_item(
         cog_path,
         id=item_id,
         input_datetime=datetime_obj,
-        properties={},
+        properties=props,
         asset_href="",
         with_proj=True,
         with_raster=True,
@@ -274,6 +283,7 @@ def convert_timeslice_to_cog(input_data: DataArray, time, var_name, lat_c, lon_c
     data.rio.to_raster(out_path, driver='COG', sharing=False, **DRIVER_KWARGS)
     return data, out_path
 
+
 def main(args):
     zarr_url = args.zarr
     time_c = args.time
@@ -308,7 +318,8 @@ def main(args):
                     var_attrs=data.attrs,
                     global_attrs=ds.attrs,
                     collection_id=collection_id,
-                    zarr_url=zarr_url
+                    zarr_url=zarr_url,
+                    source=args.source_granule_id
                 )
                 
                 # Add to catalog items list
@@ -394,6 +405,13 @@ def cli_main():
         '--concept_id',
         required=True,
         help='Concept ID for STAC collection naming (e.g., "C1276812838-GES_DISC")'
+    )
+
+    parser.add_argument(
+        '--source-granule-id',
+        type=str,
+        dest='source_granule_id',
+        help='ID of source granule'
     )
 
     args = parser.parse_args()
