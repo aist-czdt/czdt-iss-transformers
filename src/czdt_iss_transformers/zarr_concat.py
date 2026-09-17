@@ -119,8 +119,8 @@ def main(args):
     logger.info(ds)
 
     cb_subset = {
-        config['coordinates']['latitude']: slice(36.405, 43.005),
-        config['coordinates']['longitude']: slice(-80.595, -74.495),
+        config['coordinates']['latitude']: slice(22.820, 45.315),
+        config['coordinates']['longitude']: slice(-82.506, -66.727),
     }
 
     logger.info('TEMPORARY: Subsetting data to Chesapeake Bay')
