@@ -1,6 +1,7 @@
 
 import argparse
 import json
+import logging
 import os
 import shutil
 import sys
@@ -18,7 +19,16 @@ from numcodecs.blosc import Blosc as BloscZ2
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
-from src.util import open_zarr, get_config
+try:
+    from czdt_iss_transformers.util import open_zarr, get_config
+except ImportError:
+    print('could not import czdt_iss_transformers.util, trying different path', file=sys.stderr)
+    from .util import open_zarr, get_config
+
+# Configure logging: INFO for basic config, DEBUG for this module
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 staging_dirs = []
 
@@ -53,16 +63,16 @@ def main(args):
         if stage_dir is not None:
             staging_dirs.append(stage_dir)
 
-        print(f'Opened zarr dataset at {z_url}')
+        logger.debug(f'Opened zarr dataset at {z_url}')
 
         datasets.append(ds)
 
-    print(f'Opened {len(datasets):,} zarr datasets')
+    logger.info(f'Opened {len(datasets):,} zarr datasets')
 
     ds = xr.concat(datasets, dim=dim).sortby(dim)
 
-    print('New dataset:')
-    print(ds)
+    logger.info('New dataset:')
+    logger.debug(f'Dataset info: {ds}')
 
     time_coord = config['coordinates']['time']
 
@@ -71,7 +81,7 @@ def main(args):
     times = ds[time_coord].to_numpy()
 
     if any(np.diff(times).astype(int) == 0):
-        print(f'Warning: duplicate time steps detected')
+        logger.warning('Duplicate time steps detected')
 
         prev = None
         drop = []
@@ -82,17 +92,17 @@ def main(args):
 
             prev = v
 
-        print(f'Dropping {len(drop):,} time steps at indices: {drop}')
+        logger.info(f'Dropping {len(drop):,} time steps at indices: {drop}')
 
         ds = ds.drop_duplicates(dim=dim, keep='first')
 
     if args.duration is not None:
         ds_duration = pd.Timedelta((ds[time_coord][-1] - ds[time_coord][0]).data.item())
 
-        print(f'new dataset duration: {ds_duration}')
+        logger.info(f'New dataset duration: {ds_duration}')
 
         if ds_duration > args.duration:
-            print('Dataset duration exceeds max duration provided')
+            logger.warning('Dataset duration exceeds max duration provided')
 
             idx = 0
 
@@ -101,24 +111,24 @@ def main(args):
 
             ds = ds.isel(time=slice(idx, None))
 
-            print(f'Dropped {idx:,} time steps. New dataset duration: '
-                  f'{pd.Timedelta((ds[time_coord][-1] - ds[time_coord][0]).data.item())}')
+            logger.info(f'Dropped {idx:,} time steps. New dataset duration: '
+                        f'{pd.Timedelta((ds[time_coord][-1] - ds[time_coord][0]).data.item())}')
 
-    print('Forcing ascending coordinates')
+    logger.info('Forcing ascending coordinates')
     ds = ds.sortby(config['coordinates']['latitude'], config['coordinates']['longitude'])
-    print(ds)
+    logger.info(ds)
 
     cb_subset = {
         config['coordinates']['latitude']: slice(36.405, 43.005),
         config['coordinates']['longitude']: slice(-80.595, -74.495),
     }
 
-    print('TEMPORARY: Subsetting data to Chesapeake Bay')
+    logger.info('TEMPORARY: Subsetting data to Chesapeake Bay')
     ds = ds.sel(**cb_subset)
 
     chunk_config = {config['dimensions'][d]: config['chunks'][d] for d in config['chunks']}
 
-    print(f'Setting chunk config: {chunk_config}')
+    logger.debug(f'Setting chunk config: {chunk_config}')
 
     for var in ds.data_vars:
         ds[var] = ds[var].chunk(chunk_config)
@@ -131,8 +141,8 @@ def main(args):
         # TODO: There MUST be a much better way to detect we're converting from Zarr3 to Zarr2
         #  which requires clearing all encoding settings (leaving _FillValue since I think it may be important)
         if 'serializer' in ds[list(ds.data_vars)[0]].encoding:
-            print('Detected conversion of zarr v3 data to zarr v2, clearing encoding data except for fill value and '
-                  'dtype')
+            logger.debug('Detected conversion of zarr v3 data to zarr v2, clearing encoding data except for fill value and '
+                         'dtype')
 
             for var in ds.variables:
                 ds[var].encoding = {
@@ -147,7 +157,7 @@ def main(args):
             'consolidated': True
         }
 
-    print(f'Writing to zarr (v{args.zarr_version}) file: {os.path.join("output", output)}')
+    logger.info(f'Writing to zarr (v{args.zarr_version}) file: {os.path.join("output", output)}')
 
     import warnings
 
@@ -162,7 +172,8 @@ def main(args):
         )
 
 
-if __name__ == '__main__':
+def cli_main():
+    """Entry point for CLI script"""
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -217,14 +228,18 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    print(args)
+    logger.debug(f'CLI arguments: {args}')
 
     try:
         main(args)
     finally:
         for sd in staging_dirs:
             try:
-                print(f'Cleaning up staging dir: {sd}')
+                logger.debug(f'Cleaning up staging dir: {sd}')
                 shutil.rmtree(sd)
-            except:
-                print(f'Failed to remove staging dir: {sd}')
+            except Exception as e:
+                logger.error(f'Failed to remove staging dir: {sd}: {e}')
+
+
+if __name__ == '__main__':
+    cli_main()

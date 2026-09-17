@@ -1,10 +1,10 @@
 bbox:
-  min_lat: 49.51
-  min_lon: -72
-  max_lat: 53.28
-  max_lon: -67.85
+  min_lat: 36.405
+  min_lon: -80.595
+  max_lat: 43.005
+  max_lon: -74.495
 resolution_deg: 0.0002
-resampling_method: nearest
+resampling_method: mode
 chunks:
   time: 7
   latitude: 2500

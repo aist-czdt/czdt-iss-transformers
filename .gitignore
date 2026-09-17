@@ -175,5 +175,10 @@ cython_debug/
 
 input/
 output/
+test*
+.vscode/
+.serena/
+.claude/
 
 .DS_Store
+test/files/*

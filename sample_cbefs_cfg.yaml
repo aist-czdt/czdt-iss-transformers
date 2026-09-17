@@ -1,0 +1,8 @@
+chunks:
+  time: 14
+  latitude: 150
+  longitude: 150
+dimensions:
+  time: time
+  latitude: lat
+  longitude: lon

@@ -1,0 +1,8 @@
+chunks:
+  time: 14
+  latitude: 90
+  longitude: 90
+dimensions:
+  time: time
+  latitude: north_south
+  longitude: east_west

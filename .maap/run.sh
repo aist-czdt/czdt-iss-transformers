@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 
+set -x
+
 # Get current location of build script
 basedir=$( cd "$(dirname "$0")" ; pwd -P )
 root_dir=$(dirname "${basedir}")
 
 mkdir -p output
-source activate cf2zarr
-python "${root_dir}"/src/cf2zarr.py \
-  $([ -n "$1" ] && echo $1)\
-  --input-s3 $2 \
+source activate czdt-iss-transformers
+python "${root_dir}"/src/czdt_iss_transformers/cf2zarr.py \
+  $1\
+  --input $2 \
   --zarr $3 \
   --zarr-access $4 \
   --pattern "$5" \

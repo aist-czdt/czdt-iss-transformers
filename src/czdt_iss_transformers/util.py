@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import tempfile
 from typing import Optional, Tuple
@@ -12,6 +13,10 @@ from s3fs import S3FileSystem, S3Map
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH = os.path.join(SCRIPT_DIR, 'schema', 'dataset_schema.yaml')
+
+# Configure logging: INFO for basic config, DEBUG for this module  
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(module)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_CONFIG = {
@@ -35,7 +40,7 @@ DEFAULT_CONFIG = {
 
 def get_config(path: str) -> dict:
     if path is None:
-        print('No config file provided, using default')
+        logger.debug('No config file provided, using default')
         config = DEFAULT_CONFIG
     else:
         schema = yamale.make_schema(SCHEMA_PATH)
@@ -46,7 +51,7 @@ def get_config(path: str) -> dict:
         with open(path, 'r') as fp:
             config_data = yaml.safe_load(fp)
 
-        print(f'Validated and loaded config from {path}')
+        logger.debug(f'Validated and loaded config from {path}')
 
         config = {
             'chunks': config_data['chunks'],
@@ -55,7 +60,7 @@ def get_config(path: str) -> dict:
 
         config['coordinates'] = config_data.get('coordinates', config['dimensions'])
 
-    print(f'Final config:\n{json.dumps(config, indent=2)}')
+    logger.debug(f'Final config:\n{json.dumps(config, indent=2)}')
 
     return config
 
@@ -63,7 +68,7 @@ def get_config(path: str) -> dict:
 def stage_s3(prefix_url: str, client) -> str:
     staging_dir = tempfile.mkdtemp(dir=os.getcwd())
 
-    print(f'Created data staging directory: {staging_dir}')
+    logger.debug(f'Created data staging directory: {staging_dir}')
 
     parsed_url = urlparse(prefix_url)
 
@@ -87,12 +92,12 @@ def stage_s3(prefix_url: str, client) -> str:
                 head = client.head_object(Bucket=bucket, Key=obj)
 
                 if head['ContentLength'] == 0:
-                    print(f'Skipping directory object {obj}')
+                    logger.debug(f'Skipping directory object {obj}')
                     continue
 
             dst = os.path.join(staging_dir, obj.removeprefix(strip_prefix))
             os.makedirs(os.path.dirname(dst), exist_ok=True)
-            print(f'Downloading s3://{bucket}/{obj} to {dst}')
+            logger.debug(f'Downloading s3://{bucket}/{obj} to {dst}')
             client.download_file(bucket, obj, dst)
 
     return staging_dir
@@ -100,11 +105,11 @@ def stage_s3(prefix_url: str, client) -> str:
 
 def open_zarr(zarr_url: str, method: str, client, credentials: Credentials) -> Tuple[xr.Dataset, Optional[str]]:
     if method == 'stage':
-        print('Staging zarr data to local')
+        logger.debug('Staging zarr data to local')
         local_dir = stage_s3(zarr_url.rstrip('/'), client)
         zarr_dir = os.path.join(local_dir, os.path.basename(zarr_url.rstrip('/')))
 
-        print(f'Opening staged zarr data at {zarr_dir}')
+        logger.debug(f'Opening staged zarr data at {zarr_dir}')
         return xr.open_zarr(zarr_dir, consolidated=True), local_dir
     elif method == 'mount':
         s3 = S3FileSystem(
