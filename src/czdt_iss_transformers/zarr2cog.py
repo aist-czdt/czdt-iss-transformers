@@ -10,6 +10,7 @@ from typing import Tuple
 from rio_stac import create_stac_item
 
 import boto3
+import numpy as np
 import xarray as xr
 import pystac
 from xarray import DataArray
@@ -278,9 +279,18 @@ def convert_timeslice_to_cog(input_data: DataArray, time, var_name, lat_c, lon_c
     os.makedirs(output_dir, exist_ok=True)
     out_path = os.path.join(output_dir, filename)
 
+    # Write exactly the decoded physical values as float32 with NaN nodata. The DataArray still carries the
+    # source file's CF packing in .encoding (int16 + scale_factor/add_offset/_FillValue for MUR SST); leaving
+    # that in place let the raster writer re-encode the values, and every MUR COG produced by the 2026-09
+    # builds held Kelvin modulo 256 with land as 0 instead of 271..305 K with NaN. Clearing the encoding and
+    # fixing the dtype makes the on-disk values independent of the input file's packing.
+    data = data.astype('float32')
+    data.encoding = {}
+    data = data.rio.write_nodata(np.nan, encoded=False)
+
     logger.debug(f'Writing timestep {dt} to {out_path}')
 
-    data.rio.to_raster(out_path, driver='COG', sharing=False, **DRIVER_KWARGS)
+    data.rio.to_raster(out_path, driver='COG', sharing=False, dtype='float32', **DRIVER_KWARGS)
     return data, out_path
 
 
