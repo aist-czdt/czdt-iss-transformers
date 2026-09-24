@@ -11,6 +11,8 @@ from rio_stac import create_stac_item
 
 import boto3
 import numpy as np
+import rasterio
+import rasterio.shutil
 import xarray as xr
 import pystac
 from xarray import DataArray
@@ -279,19 +281,35 @@ def convert_timeslice_to_cog(input_data: DataArray, time, var_name, lat_c, lon_c
     os.makedirs(output_dir, exist_ok=True)
     out_path = os.path.join(output_dir, filename)
 
-    # Write exactly the decoded physical values as float32 with NaN nodata. The DataArray still carries the
-    # source file's CF packing in .encoding (int16 + scale_factor/add_offset/_FillValue for MUR SST); leaving
-    # that in place let the raster writer re-encode the values, and every MUR COG produced by the 2026-09
-    # builds held Kelvin modulo 256 with land as 0 instead of 271..305 K with NaN. Clearing the encoding and
-    # fixing the dtype makes the on-disk values independent of the input file's packing.
+    # Write exactly the decoded physical values as float32 with NaN nodata, and never create the file through
+    # rasterio's COG driver: with rasterio 1.5.1 on GDAL 3.13.3 (conda-forge, Sept 2026) that path allocates
+    # its intermediate as 8-bit, so every MUR SST COG held Kelvin modulo 256 with land as 0 while the Zarr held
+    # 271..307 K. Writing a tiled GeoTIFF and converting it with GDAL's copy path is correct on both stacks.
     data = data.astype('float32')
     data.encoding = {}
     data = data.rio.write_nodata(np.nan, encoded=False)
 
     logger.debug(f'Writing timestep {dt} to {out_path}')
 
-    data.rio.to_raster(out_path, driver='COG', sharing=False, dtype='float32', **DRIVER_KWARGS)
+    tmp_path = out_path + '.gtiff.tmp'
+    data.rio.to_raster(tmp_path, driver='GTiff', dtype='float32', tiled=True, compress='deflate',
+                       blockxsize=512, blockysize=512, sharing=False)
+    rasterio.shutil.copy(tmp_path, out_path, driver='COG', compress='deflate', overviews='AUTO',
+                         overview_resampling='average', **DRIVER_KWARGS)
+    os.remove(tmp_path)
+    _verify_cog_matches(data, out_path)
     return data, out_path
+
+
+def _verify_cog_matches(data: DataArray, path: str) -> None:
+    """Fail loudly if the file on disk does not hold the array's values (guards against writer regressions)."""
+    src_max = float(np.nanmax(data.values)) if np.isfinite(data.values).any() else None
+    with rasterio.open(path) as ds:
+        band = ds.read(1)
+    file_max = float(np.nanmax(band)) if np.isfinite(band).any() else None
+    if src_max is not None and (file_max is None or abs(file_max - src_max) > 1e-3 * max(1.0, abs(src_max))):
+        raise RuntimeError(f'COG value mismatch for {path}: array max {src_max} but file max {file_max}; '
+                           f'the raster writer altered the values')
 
 
 def main(args):
