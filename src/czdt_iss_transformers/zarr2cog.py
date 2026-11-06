@@ -43,6 +43,21 @@ DRIVER_OPTIONS = [
     'zoom_level', 'zoom_level_strategy', 'target_srs', 'res', 'extent', 'aligned_levels', 'add_alpha'
 ]
 COLLECTION_GLOBAL_PROPERTIES = ['title', 'instrument', 'platform', 'Conventions', 'summary', 'processing_level']
+# Collection-title overrides keyed by collection-id prefix. The collection id is "<concept_id>-<var_name>"; when it
+# starts with one of these prefixes the collection title becomes the replacement followed by the rest of the id, instead
+# of the source file's "title" global attribute. The CBEFS pipeline names its collections
+# "chesroms_ECB_HR_avg-<layer>-<run>-<var>" and the catalog presents them as "VIMS CBEFS : ECB_HR_avg-<layer>-<run>-<var>".
+COLLECTION_TITLE_PREFIX_OVERRIDES = {
+    'chesroms_': 'VIMS CBEFS : ',
+}
+
+
+def collection_title_override(collection_id):
+    """Return the overridden title for collection_id, or None when no COLLECTION_TITLE_PREFIX_OVERRIDES prefix matches."""
+    for prefix, replacement in COLLECTION_TITLE_PREFIX_OVERRIDES.items():
+        if collection_id.startswith(prefix):
+            return replacement + collection_id[len(prefix):]
+    return None
 
 
 def open_zarr_dataset(zarr_url, zarr_access):
@@ -225,6 +240,10 @@ def create_stac_collection_from_items(items, global_attrs, concept_id, var_name)
     for attr in COLLECTION_GLOBAL_PROPERTIES:
         if attr in global_attrs:
             collection.extra_fields[attr] = global_attrs[attr]
+
+    title_override = collection_title_override(collection_id)
+    if title_override is not None:
+        collection.extra_fields['title'] = title_override
     
     # Add metadata derived from collection_id
     collection.extra_fields["variable_name"] = var_name
