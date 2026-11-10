@@ -10,9 +10,11 @@ dependencies:
   - cftime
   - pandas
   - boto3
-  - s3fs==2025.3.2
-  - fsspec==2025.3.2
-  - aiobotocore==2.21.1
+  # Pin only s3fs; it pins its own matching fsspec and a compatible aiobotocore range.
+  # Pinning all three (and aiobotocore in particular, which pins botocore to a 2-patch
+  # window) forced a huge downgrade when installed into the ingest env on DPS and the
+  # conda solve ran past the 1h registration timeout (register-job job 23600, 2026-11-06).
+  - s3fs==2026.9.0
   - rioxarray
   - yamale
   - odc-geo
