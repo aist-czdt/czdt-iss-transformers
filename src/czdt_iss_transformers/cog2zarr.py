@@ -272,7 +272,7 @@ def main(args):
         final_ds[var] = final_ds[var].chunk(chunk_config)
 
     compressor = Blosc(cname="blosclz", clevel=9)
-    encoding = {vname: {'compressor': compressor} for vname in final_ds.data_vars}
+    encoding = {vname: {'compressors': [compressor]} for vname in final_ds.data_vars}
 
     if 'nodata' in config:
         for var in final_ds.data_vars:

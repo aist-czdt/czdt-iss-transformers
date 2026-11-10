@@ -144,7 +144,7 @@ def main(args):
                 }
 
         compressor = BloscZ2(cname="blosclz", clevel=9)
-        encoding = {vname: {'compressor': compressor} for vname in ds.data_vars}
+        encoding = {vname: {'compressors': [compressor]} for vname in ds.data_vars}
         to_zarr_kwargs = {
             'consolidated': True
         }

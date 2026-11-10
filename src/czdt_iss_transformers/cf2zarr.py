@@ -178,7 +178,7 @@ def convert_cf_to_zarr(
 
     # Setup compression and write to zarr
     compressor = Blosc(cname="blosclz", clevel=9)
-    encoding = {vname: {'compressor': compressor} for vname in ds.data_vars}
+    encoding = {vname: {'compressors': [compressor]} for vname in ds.data_vars}
 
     # Ensure output directory exists
     output_dir = os.path.dirname(output_path) if os.path.dirname(output_path) else '.'
