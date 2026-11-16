@@ -349,6 +349,12 @@ def main(args):
         var_items = []
         da = ds[var_name]
 
+        # Only gridded variables become COGs. Stores written by cog2zarr carry the scalar CRS variable
+        # (spatial_ref) as a data variable, which has no time dimension to iterate over.
+        if not {time_c, lat_c, lon_c}.issubset(da.dims):
+            logger.info(f'Skipping variable {var_name}: not on the ({time_c}, {lat_c}, {lon_c}) grid')
+            continue
+
         for time in da[time_c]:
             dt = time.values.astype('datetime64[s]').item()
             data, tif_file = convert_timeslice_to_cog(da, time, var_name, lat_c, lon_c, args.output)
