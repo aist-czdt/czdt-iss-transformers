@@ -1,0 +1,24 @@
+# cog2zarr config for OPERA L3 DSWx-HLS water classification (WTR band), e.g.
+# OPERA_L3_DSWx-HLS_T18SUG_20261104T154047Z_20261107T013750Z_L9_30_v1.1_B01_WTR.tif
+#
+# Every input is written on the full bbox grid, so bbox x resolution_deg sets the size of each output slice.
+# WTR is categorical (0 not water, 1 open water, 2 partial surface water, 252 snow/ice, 253 cloud, 255 fill):
+# resample with mode, never an average.
+bbox:
+  min_lat: 22.82
+  min_lon: -82.506
+  max_lat: 45.315
+  max_lon: -66.727
+resolution_deg: 0.1
+resampling_method: mode
+chunks:
+  time: 7
+  latitude: 250
+  longitude: 250
+band_map:
+  1: "WTR"
+filename_pattern: '(?P<id>(?P<project>OPERA)_(?P<level>L3)_(?P<product_type>DSWx)-(?P<source>HLS)_(?P<tile_id>T[^\W_]{5})_(?P<acquisition_ts>\d{8}T\d{6}Z)_(?P<creation_ts>\d{8}T\d{6}Z)_(?P<sensor>L8|L9|S2A|S2B|S2C)_(?P<spacing>30)_(?P<product_version>v\d+[.]\d+))_(?P<band_index>B\d{2})_(?P<band_name>WTR)[.](?P<ext>tif|tiff)$'
+timestamp:
+  group: acquisition_ts
+  dt_string: '%Y%m%dT%H%M%SZ'
+nodata: 255

@@ -6,7 +6,7 @@ import shutil
 import sys
 from datetime import datetime
 from pathlib import PurePath
-from typing import Tuple
+from typing import List, Tuple
 
 import boto3
 import numpy as np
@@ -127,14 +127,56 @@ def _get_bbox_from_config(config) -> Tuple[float, float, float, float]:
         return -180.0, -90.0, 180.0, 90.0
 
 
-def main(args):
-    config_path = args.config
-    pattern = args.pattern
-    output = args.output
+def _find_input_tiffs(input_path, pattern, aws_profile=None) -> List[str]:
+    """Resolve the input to a list of local GeoTIFF paths.
 
-    session = boto3.Session(profile_name=os.getenv('AWS_PROFILE', None))
-    client = session.client('s3')
+    An S3 URL prefix is staged to a local temp directory and searched with the pattern, a local directory is
+    searched with the pattern, and a single local file is used as is (same convention as cf2zarr).
+    """
+    if input_path.startswith('s3://'):
+        session = boto3.Session(profile_name=aws_profile or os.getenv('AWS_PROFILE', None))
+        client = session.client('s3')
+        search_dir = stage_s3(input_path, client)
+        staging_dirs.append(search_dir)
+    elif os.path.isfile(input_path):
+        return [input_path]
+    elif os.path.isdir(input_path):
+        search_dir = input_path
+    else:
+        raise ValueError(f'Input path does not exist: {input_path}')
 
+    input_tiffs = []
+
+    for root, dirs, files in os.walk(search_dir):
+        for filename in files:
+            path = os.path.join(root, filename)
+            if PurePath(path).match(pattern):
+                input_tiffs.append(path)
+
+    return input_tiffs
+
+
+def convert_cog_to_zarr(
+    config_path,
+    input_path,
+    output_path,
+    pattern='*.tif',
+    duration=None,
+    aws_profile=None,
+):
+    """Convert GeoTIFF (COG) files to a Zarr store on a regular EPSG:4326 grid.
+
+    Args:
+        config_path: Path to configuration YAML file (see schema/geotiff_schema.yaml)
+        input_path: Input GeoTIFFs: S3 URL prefix, local directory, or a single local file
+        output_path: Output zarr filename/path
+        pattern: Glob pattern to match files in a directory or S3 prefix (default: '*.tif')
+        duration: Maximum time duration as pandas.Timedelta (default: None)
+        aws_profile: AWS profile name (default: None)
+
+    Returns:
+        xarray.Dataset: The processed dataset
+    """
     schema = yamale.make_schema(SCHEMA_PATH, validators=VALIDATORS)
     data = yamale.make_data(config_path)
 
@@ -143,22 +185,13 @@ def main(args):
     with open(config_path, 'r') as fp:
         config = yaml.safe_load(fp)
 
-    input_stage_dir = stage_s3(args.input_s3, client)
-    staging_dirs.append(input_stage_dir)
-
     times = {}
     filename_pattern = re.compile(config['filename_pattern'])
 
-    input_tiffs = []
-
-    for root, dirs, files in os.walk(input_stage_dir):
-        for filename in files:
-            path = os.path.join(root, filename)
-            if PurePath(path).match(pattern):
-                input_tiffs.append(path)
+    input_tiffs = _find_input_tiffs(input_path, pattern, aws_profile)
 
     if len(input_tiffs) == 0:
-        raise ValueError('no tiffs found in input dir')
+        raise ValueError(f'no tiffs found for input {input_path} with pattern {pattern}')
 
     chunk_config = config.get('chunks', {
         'time': 24,
@@ -248,17 +281,17 @@ def main(args):
     final_ds = xr.concat(reprojected_slices, dim='time').sortby('time')
     logger.info(f'Concatenated all timestamps into single dataset:\n{final_ds}')
 
-    if args.duration is not None:
+    if duration is not None:
         ds_duration = pd.Timedelta((final_ds['time'][-1] - final_ds['time'][0]).data.item())
 
         logger.info(f'New dataset duration: {ds_duration}')
 
-        if ds_duration > args.duration:
+        if ds_duration > duration:
             logger.warning('Dataset duration exceeds max duration provided')
 
             idx = 0
 
-            while pd.Timedelta((final_ds['time'][-1] - final_ds['time'][idx]).data.item()) > args.duration:
+            while pd.Timedelta((final_ds['time'][-1] - final_ds['time'][idx]).data.item()) > duration:
                 idx += 1
 
             final_ds = final_ds.isel(time=slice(idx, None))
@@ -278,14 +311,27 @@ def main(args):
         for var in final_ds.data_vars:
             encoding[var]['fill_value'] = config['nodata']
 
-    logger.info(f'Writing to zarr file: {os.path.join("output", output)}')
+    logger.info(f'Writing to zarr file: {output_path}')
 
     final_ds.to_zarr(
-        os.path.join('output', output),
+        output_path,
         mode='w-',
         encoding=encoding,
         consolidated=True,
         write_empty_chunks=False
+    )
+
+    return final_ds
+
+
+def main(args):
+    """Main function for CLI usage"""
+    return convert_cog_to_zarr(
+        config_path=args.config,
+        input_path=args.input_s3,
+        output_path=os.path.join('output', args.output),
+        pattern=args.pattern,
+        duration=args.duration,
     )
 
 
@@ -294,9 +340,10 @@ def cli_main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        '-i', '--input-s3',
+        '-i', '--input', '--input-s3',
+        dest='input_s3',
         required=True,
-        help='S3 URL prefix of input files to stage'
+        help='Input GeoTIFFs: S3 URL prefix to stage, local directory, or a single local file'
     )
 
     parser.add_argument(
